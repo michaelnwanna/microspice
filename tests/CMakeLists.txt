@@ -1,0 +1,5 @@
+add_executable(microspice_tests microspice_test.cpp)
+target_link_libraries(microspice_tests PRIVATE microspice::core)
+ms_set_warnings(microspice_tests)
+
+add_test(NAME microspice_tests COMMAND microspice_tests)
