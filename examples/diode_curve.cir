@@ -1,0 +1,5 @@
+* Sweep an ideal voltage source to trace the Shockley diode curve.
+V1 out 0 0
+D1 out 0
+.dc V1 0 0.8 0.02
+.end

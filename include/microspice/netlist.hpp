@@ -34,9 +34,18 @@ struct TransientDirective {
     double stopTimeSeconds;
 };
 
+struct DcSweepDirective {
+    std::string sourceName;
+    double startVoltage;
+    double stopVoltage;
+    double stepVoltage;
+    std::size_t line;
+};
+
 struct ParsedNetlist {
     Circuit circuit;
     std::optional<TransientDirective> transient;
+    std::optional<DcSweepDirective> dcSweep;
 };
 
 inline std::string lowercase(std::string text) {
@@ -140,6 +149,10 @@ inline ParsedNetlist parseNetlistDocument(const std::string& text) {
                 throw NetlistError(lineNumber,
                                    "only one .tran directive is allowed");
             }
+            if (parsed.dcSweep) {
+                throw NetlistError(lineNumber,
+                                   ".tran and .dc cannot be combined");
+            }
             const double timeStep =
                 detail::parseValueAtLine(tokens[1], lineNumber);
             const double stopTime =
@@ -150,6 +163,35 @@ inline ParsedNetlist parseNetlistDocument(const std::string& text) {
                     ".tran requires a positive timestep and stop >= timestep");
             }
             parsed.transient = TransientDirective{timeStep, stopTime};
+            continue;
+        }
+
+        if (lowercase(tokens[0]) == ".dc") {
+            if (tokens.size() != 5) {
+                throw NetlistError(
+                    lineNumber,
+                    "DC sweep syntax is: .dc source start stop step");
+            }
+            if (parsed.dcSweep) {
+                throw NetlistError(lineNumber,
+                                   "only one .dc directive is allowed");
+            }
+            if (parsed.transient) {
+                throw NetlistError(lineNumber,
+                                   ".tran and .dc cannot be combined");
+            }
+            const double start =
+                detail::parseValueAtLine(tokens[2], lineNumber);
+            const double stop = detail::parseValueAtLine(tokens[3], lineNumber);
+            const double step = detail::parseValueAtLine(tokens[4], lineNumber);
+            if (step == 0.0 || (stop > start && step < 0.0) ||
+                (stop < start && step > 0.0)) {
+                throw NetlistError(
+                    lineNumber,
+                    ".dc step must be nonzero and point toward stop");
+            }
+            parsed.dcSweep =
+                DcSweepDirective{tokens[1], start, stop, step, lineNumber};
             continue;
         }
 
@@ -182,6 +224,25 @@ inline ParsedNetlist parseNetlistDocument(const std::string& text) {
                 continue;
             }
 
+            if (type == 'D') {
+                if (tokens.size() < 3 || tokens.size() > 5) {
+                    throw NetlistError(
+                        lineNumber,
+                        "diode syntax is: Dname anode cathode [Is [n]]");
+                }
+                const double saturationCurrent =
+                    tokens.size() >= 4
+                        ? detail::parseValueAtLine(tokens[3], lineNumber)
+                        : 1e-12;
+                const double idealityFactor =
+                    tokens.size() == 5
+                        ? detail::parseValueAtLine(tokens[4], lineNumber)
+                        : 1.0;
+                parsed.circuit.addDiode(tokens[0], tokens[1], tokens[2],
+                                        saturationCurrent, idealityFactor);
+                continue;
+            }
+
             if (type == 'I' || type == 'V') {
                 std::size_t valueIndex = 3;
                 if (tokens.size() == 5 && lowercase(tokens[3]) == "dc") {
@@ -209,6 +270,20 @@ inline ParsedNetlist parseNetlistDocument(const std::string& text) {
             throw;
         } catch (const std::invalid_argument& error) {
             throw NetlistError(lineNumber, error.what());
+        }
+    }
+    if (parsed.dcSweep) {
+        bool sourceExists = false;
+        for (const VoltageSource& source : parsed.circuit.voltageSources()) {
+            if (source.name == parsed.dcSweep->sourceName) {
+                sourceExists = true;
+                break;
+            }
+        }
+        if (!sourceExists) {
+            throw NetlistError(
+                parsed.dcSweep->line,
+                "unknown DC sweep source: " + parsed.dcSweep->sourceName);
         }
     }
     return parsed;

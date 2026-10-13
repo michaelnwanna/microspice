@@ -1,0 +1,7 @@
+* Antiparallel diodes limit the output near one forward drop.
+V1 in 0 0
+R1 in out 1k
+Dpositive out 0
+Dnegative 0 out
+.dc V1 -5 5 0.25
+.end

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(microspice
-  VERSION 0.3.0
+  VERSION 0.4.0
   DESCRIPTION "An educational SPICE-inspired circuit simulator"
   LANGUAGES CXX
 )
@@ -34,6 +34,10 @@ ms_set_warnings(dc_walkthrough)
 add_executable(transient_walkthrough examples/transient_walkthrough.cpp)
 target_link_libraries(transient_walkthrough PRIVATE microspice::core)
 ms_set_warnings(transient_walkthrough)
+
+add_executable(nonlinear_walkthrough examples/nonlinear_walkthrough.cpp)
+target_link_libraries(nonlinear_walkthrough PRIVATE microspice::core)
+ms_set_warnings(nonlinear_walkthrough)
 
 add_executable(microspice_cli examples/microspice_cli.cpp)
 target_link_libraries(microspice_cli PRIVATE microspice::core)

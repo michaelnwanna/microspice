@@ -1,0 +1,6 @@
+* The diode passes positive input voltage into a 1 kohm load.
+V1 in 0 0
+D1 in out
+Rload out 0 1k
+.dc V1 -5 5 0.25
+.end

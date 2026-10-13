@@ -4,12 +4,15 @@
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 
 #include "microspice/csv.hpp"
 #include "microspice/dc_solver.hpp"
+#include "microspice/dc_sweep.hpp"
 #include "microspice/netlist.hpp"
+#include "microspice/nonlinear_solver.hpp"
 #include "microspice/transient_solver.hpp"
 
 int main(int argc, char* argv[]) {
@@ -38,8 +41,40 @@ int main(int argc, char* argv[]) {
             microspice::writeTransientCsv(std::cout, result);
             return 0;
         }
+        if (parsed.dcSweep) {
+            const microspice::DcSweepResult sweep = microspice::solveDcSweep(
+                parsed.circuit, {parsed.dcSweep->sourceName,
+                                 parsed.dcSweep->startVoltage,
+                                 parsed.dcSweep->stopVoltage,
+                                 parsed.dcSweep->stepVoltage,
+                                 {}});
+            for (const auto& point : sweep.points) {
+                if (!point.result.converged) {
+                    throw std::runtime_error(
+                        "Newton-Raphson failed during DC sweep");
+                }
+            }
+            microspice::writeDcSweepCsv(std::cout, sweep);
+            return 0;
+        }
 
-        const microspice::DcResult result = microspice::solveDc(parsed.circuit);
+        std::optional<microspice::DcResult> operatingPoint;
+        std::size_t newtonIterations = 0;
+        if (parsed.circuit.diodes().empty()) {
+            operatingPoint = microspice::solveDc(parsed.circuit);
+        } else {
+            const microspice::NonlinearDcResult nonlinear =
+                microspice::solveNonlinearDc(parsed.circuit);
+            if (!nonlinear.converged) {
+                throw std::runtime_error(
+                    "Newton-Raphson failed to converge after " +
+                    std::to_string(nonlinear.iterations.size()) +
+                    " iterations");
+            }
+            operatingPoint = nonlinear.operatingPoint;
+            newtonIterations = nonlinear.iterations.size();
+        }
+        const microspice::DcResult& result = *operatingPoint;
 
         std::printf("DC operating point\n");
         for (const std::string& node : result.nodeNames) {
@@ -54,6 +89,9 @@ int main(int argc, char* argv[]) {
         std::printf("\nMNA system size: %zu unknowns\n",
                     result.systemMatrix.size());
         std::printf("Component stamps: %zu\n", result.stamps.size());
+        if (newtonIterations != 0) {
+            std::printf("Newton iterations: %zu\n", newtonIterations);
+        }
     } catch (const std::exception& error) {
         std::fprintf(stderr, "error: %s\n", error.what());
         return 1;

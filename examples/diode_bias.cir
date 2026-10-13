@@ -1,0 +1,5 @@
+* A 5 V source biases a silicon diode through a 1 kohm resistor.
+V1 in 0 5
+R1 in out 1k
+D1 out 0
+.end

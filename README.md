@@ -6,12 +6,12 @@
 
 [![CI](https://github.com/michaelnwanna/microspice/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 ![C++17](https://img.shields.io/badge/C%2B%2B-17-blue)
-![Phase](https://img.shields.io/badge/phase-3%20transient%20analysis-teal)
+![Phase](https://img.shields.io/badge/phase-4%20nonlinear%20DC-teal)
 
-## Current phase: capacitor transient analysis
+## Current phase: nonlinear DC analysis
 
-microspice solves linear DC and time-domain circuits containing resistors,
-capacitors, and independent current and voltage sources. Phase 3 includes:
+microspice solves linear and nonlinear DC circuits plus linear capacitor
+transients. Phase 4 includes:
 
 - a dense matrix type,
 - Gaussian elimination with partial pivoting,
@@ -25,13 +25,18 @@ capacitors, and independent current and voltage sources. Phase 3 includes:
 - configurable initial capacitor voltages,
 - per-timestep matrix, right-hand side, and capacitor-history diagnostics,
 - an RC walkthrough checked against the analytical charging curve,
+- Shockley-equation diode models with configurable $I_S$ and ideality factor,
+- Newton-Raphson tangent linearization and junction-voltage limiting,
+- inspectable convergence diagnostics for every iteration,
+- `.dc` source sweeps with CSV output,
+- diode-curve, clipper, and half-wave rectifier examples,
 - detection of floating or otherwise singular circuits,
 - an inspectable result containing the full MNA system and solution,
 - dependency-free tests derived from Ohm's law, and
 - CLI tools for programmatic and text-netlist workflows.
 
-The component set remains deliberately small. Diodes arrive only after the
-linear and time-domain foundations are testable and visible.
+The component set remains deliberately small so every model and convergence
+decision stays testable and visible.
 
 ## Quick start
 
@@ -41,8 +46,12 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ./build/dc_walkthrough
 ./build/transient_walkthrough
+./build/nonlinear_walkthrough
 ./build/microspice_cli examples/voltage_divider.cir
 ./build/microspice_cli examples/rc_charging.cir > rc.csv
+./build/microspice_cli examples/diode_curve.cir > diode.csv
+./build/microspice_cli examples/diode_clipper.cir > clipper.csv
+./build/microspice_cli examples/half_wave_rectifier.cir > rectifier.csv
 ```
 
 The example constructs this network:
@@ -148,6 +157,24 @@ After each solve, the capacitor voltage becomes the history value for the next
 step. See [Phase 3: Transient Analysis](docs/phase-3-transient-analysis.md) for
 the derivation, RC example, accuracy discussion, and API details.
 
+## How a diode becomes a linear iteration
+
+A diode follows the nonlinear Shockley equation
+$I_D=I_S(e^{V_D/(nV_T)}-1)$. Newton-Raphson replaces it at the current voltage
+guess with a tangent conductance and equivalent current source:
+
+```text
+Gd  = dI/dV
+Ieq = I(Vd) - Gd * Vd
+```
+
+The resulting linear MNA system produces the next voltage guess. Iteration
+continues until both the complete solution and every diode junction agree with
+their linearization points. Junction-voltage limiting keeps early guesses from
+overflowing the exponential. See [Phase 4: Nonlinear DC
+Analysis](docs/phase-4-nonlinear-dc.md) for the derivation, stamp, convergence
+policy, and worked resistor-diode example.
+
 ## Library API
 
 The simulation core does not depend on terminal or GUI code:
@@ -171,6 +198,14 @@ Transient analysis uses the same circuit:
 circuit.addCapacitor("C1", "out", "0", 1e-6);
 const auto waveform = microspice::solveTransient(circuit, {1e-4, 5e-3, {}});
 const double firstSample = waveform.voltage(0, "out");
+```
+
+Nonlinear DC analysis retains every Newton iteration:
+
+```cpp
+circuit.addDiode("D1", "out", "0");
+const auto nonlinear = microspice::solveNonlinearDc(circuit);
+const double diodeVoltage = nonlinear.operatingPoint.voltage("out");
 ```
 
 `DcResult` also retains the assembled matrix, right-hand side, complete solution,
@@ -214,7 +249,7 @@ Parse a small SPICE-like text format, support engineering suffixes (`1k`,
 Add capacitors, backward-Euler integration, transient analysis, CSV export, and
 RC charging/discharging examples checked against analytical solutions.
 
-### Phase 4 - Nonlinear devices
+### Phase 4 - Nonlinear devices (complete)
 
 Add the Shockley diode equation, Newton-Raphson linearization, convergence
 diagnostics, DC sweeps, diode curves, clippers, and rectifiers.
@@ -232,8 +267,8 @@ devices, benchmarks, and comparisons against established SPICE implementations.
 
 ## What this is not yet
 
-This is not a replacement for production SPICE software. Phase 3 supports no
-inductors, controlled sources, nonlinear devices, adaptive timesteps, or
-simulation directives beyond `.tran` and `.end`. Those limitations are explicit
-so each later feature arrives with its mathematics, tests, and failure modes
-explained.
+This is not a replacement for production SPICE software. Phase 4 supports no
+inductors, controlled sources, nonlinear transient analysis, adaptive
+timesteps, temperature sweeps, or named semiconductor model cards. Those
+limitations are explicit so each later feature arrives with its mathematics,
+tests, and failure modes explained.

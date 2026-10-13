@@ -8,6 +8,7 @@
 #include <ostream>
 #include <string>
 
+#include "microspice/dc_sweep.hpp"
 #include "microspice/transient_solver.hpp"
 
 namespace microspice {
@@ -27,6 +28,33 @@ inline void writeTransientCsv(std::ostream& output,
             output << ',' << result.voltage(sampleIndex, node);
         }
         output << '\n';
+    }
+}
+
+inline void writeDcSweepCsv(std::ostream& output, const DcSweepResult& sweep) {
+    output << sweep.sourceName << "_V";
+    if (!sweep.points.empty()) {
+        const DcResult& first = sweep.points.front().result.operatingPoint;
+        for (const std::string& node : first.nodeNames) {
+            output << ",V(" << node << ')';
+        }
+        for (const std::string& source : first.voltageSourceNames) {
+            output << ",I(" << source << ')';
+        }
+    }
+    output << ",converged,newton_iterations\n" << std::setprecision(12);
+
+    for (const DcSweepPoint& point : sweep.points) {
+        output << point.sourceVoltage;
+        const DcResult& operatingPoint = point.result.operatingPoint;
+        for (const std::string& node : operatingPoint.nodeNames) {
+            output << ',' << operatingPoint.voltage(node);
+        }
+        for (const std::string& source : operatingPoint.voltageSourceNames) {
+            output << ',' << operatingPoint.currentThrough(source);
+        }
+        output << ',' << (point.result.converged ? 1 : 0) << ','
+               << point.result.iterations.size() << '\n';
     }
 }
 

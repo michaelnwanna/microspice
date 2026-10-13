@@ -93,6 +93,10 @@ inline void stampConductance(DenseMatrix& matrix,
 
 inline TransientResult solveTransient(const Circuit& circuit,
                                       const TransientOptions& options) {
+    if (!circuit.diodes().empty()) {
+        throw std::invalid_argument(
+            "transient analysis does not yet support nonlinear diodes");
+    }
     if (!std::isfinite(options.timeStepSeconds) ||
         options.timeStepSeconds <= 0.0) {
         throw std::invalid_argument("transient timestep must be positive");

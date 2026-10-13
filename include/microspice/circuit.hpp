@@ -41,6 +41,14 @@ struct Capacitor {
     double capacitanceFarads;
 };
 
+struct Diode {
+    std::string name;
+    std::string positiveNode;
+    std::string negativeNode;
+    double saturationCurrentAmps;
+    double idealityFactor;
+};
+
 class Circuit {
 public:
     void addResistor(std::string name, std::string positiveNode,
@@ -77,6 +85,19 @@ public:
                                    std::move(negativeNode), voltageVolts});
     }
 
+    void setVoltageSourceVoltage(const std::string& name, double voltageVolts) {
+        if (!std::isfinite(voltageVolts)) {
+            throw std::invalid_argument("voltage must be finite");
+        }
+        for (VoltageSource& source : voltageSources_) {
+            if (source.name == name) {
+                source.voltageVolts = voltageVolts;
+                return;
+            }
+        }
+        throw std::out_of_range("unknown voltage source: " + name);
+    }
+
     void addCapacitor(std::string name, std::string positiveNode,
                       std::string negativeNode, double capacitanceFarads) {
         if (!std::isfinite(capacitanceFarads) || capacitanceFarads <= 0.0) {
@@ -87,6 +108,26 @@ public:
         registerNode(negativeNode);
         capacitors_.push_back({std::move(name), std::move(positiveNode),
                                std::move(negativeNode), capacitanceFarads});
+    }
+
+    void addDiode(std::string name, std::string positiveNode,
+                  std::string negativeNode,
+                  double saturationCurrentAmps = 1e-12,
+                  double idealityFactor = 1.0) {
+        if (!std::isfinite(saturationCurrentAmps) ||
+            saturationCurrentAmps <= 0.0) {
+            throw std::invalid_argument(
+                "diode saturation current must be finite and positive");
+        }
+        if (!std::isfinite(idealityFactor) || idealityFactor <= 0.0) {
+            throw std::invalid_argument(
+                "diode ideality factor must be finite and positive");
+        }
+        registerNode(positiveNode);
+        registerNode(negativeNode);
+        diodes_.push_back({std::move(name), std::move(positiveNode),
+                           std::move(negativeNode), saturationCurrentAmps,
+                           idealityFactor});
     }
 
     const std::vector<std::string>& nodes() const noexcept { return nodes_; }
@@ -102,6 +143,7 @@ public:
     const std::vector<Capacitor>& capacitors() const noexcept {
         return capacitors_;
     }
+    const std::vector<Diode>& diodes() const noexcept { return diodes_; }
 
 private:
     static bool isGround(const std::string& node) noexcept {
@@ -128,6 +170,7 @@ private:
     std::vector<CurrentSource> currentSources_;
     std::vector<VoltageSource> voltageSources_;
     std::vector<Capacitor> capacitors_;
+    std::vector<Diode> diodes_;
 };
 
 }  // namespace microspice
