@@ -26,6 +26,14 @@ struct CurrentSource {
     double currentAmps;
 };
 
+/// voltageVolts is V(positiveNode) - V(negativeNode).
+struct VoltageSource {
+    std::string name;
+    std::string positiveNode;
+    std::string negativeNode;
+    double voltageVolts;
+};
+
 class Circuit {
 public:
     void addResistor(std::string name, std::string positiveNode,
@@ -51,12 +59,26 @@ public:
                                    std::move(negativeNode), currentAmps});
     }
 
+    void addVoltageSource(std::string name, std::string positiveNode,
+                          std::string negativeNode, double voltageVolts) {
+        if (!std::isfinite(voltageVolts)) {
+            throw std::invalid_argument("voltage must be finite");
+        }
+        registerNode(positiveNode);
+        registerNode(negativeNode);
+        voltageSources_.push_back({std::move(name), std::move(positiveNode),
+                                   std::move(negativeNode), voltageVolts});
+    }
+
     const std::vector<std::string>& nodes() const noexcept { return nodes_; }
     const std::vector<Resistor>& resistors() const noexcept {
         return resistors_;
     }
     const std::vector<CurrentSource>& currentSources() const noexcept {
         return currentSources_;
+    }
+    const std::vector<VoltageSource>& voltageSources() const noexcept {
+        return voltageSources_;
     }
 
 private:
@@ -82,6 +104,7 @@ private:
     std::vector<std::string> nodes_;
     std::vector<Resistor> resistors_;
     std::vector<CurrentSource> currentSources_;
+    std::vector<VoltageSource> voltageSources_;
 };
 
 }  // namespace microspice

@@ -32,22 +32,21 @@ int main() {
         }
     }
 
-    std::printf("\nAssembled equation G * v = i:\n");
-    for (std::size_t row = 0; row < result.nodeNames.size(); ++row) {
+    std::printf("\nAssembled equation A * x = z:\n");
+    for (std::size_t row = 0; row < result.systemMatrix.size(); ++row) {
         std::printf("  [");
-        for (std::size_t column = 0; column < result.nodeNames.size();
+        for (std::size_t column = 0; column < result.systemMatrix.size();
              ++column) {
             std::printf("%s% .6f", column == 0 ? "" : "  ",
-                        result.conductanceMatrix(row, column));
+                        result.systemMatrix(row, column));
         }
-        std::printf("] [V(%s)] = [% .6f]\n", result.nodeNames[row].c_str(),
-                    result.currentVector[row]);
+        std::printf("] = [% .6f]\n", result.rightHandSide[row]);
     }
 
     std::printf("\nSolution:\n");
     for (std::size_t index = 0; index < result.nodeNames.size(); ++index) {
         std::printf("  V(%s) = %.6f V\n", result.nodeNames[index].c_str(),
-                    result.nodeVoltages[index]);
+                    result.solution[index]);
     }
     return 0;
 }

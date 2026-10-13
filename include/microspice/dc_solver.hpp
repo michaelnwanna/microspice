@@ -22,9 +22,10 @@ struct StampTrace {
 
 struct DcResult {
     std::vector<std::string> nodeNames;
-    DenseMatrix conductanceMatrix;
-    std::vector<double> currentVector;
-    std::vector<double> nodeVoltages;
+    std::vector<std::string> voltageSourceNames;
+    DenseMatrix systemMatrix;
+    std::vector<double> rightHandSide;
+    std::vector<double> solution;
     std::vector<StampTrace> stamps;
 
     double voltage(const std::string& node) const {
@@ -33,10 +34,21 @@ struct DcResult {
         }
         for (std::size_t index = 0; index < nodeNames.size(); ++index) {
             if (nodeNames[index] == node) {
-                return nodeVoltages[index];
+                return solution[index];
             }
         }
         throw std::out_of_range("unknown node: " + node);
+    }
+
+    /// Current is positive from the source's positive node to negative node.
+    double currentThrough(const std::string& source) const {
+        for (std::size_t index = 0; index < voltageSourceNames.size();
+             ++index) {
+            if (voltageSourceNames[index] == source) {
+                return solution[nodeNames.size() + index];
+            }
+        }
+        throw std::out_of_range("unknown voltage source: " + source);
     }
 };
 
@@ -64,25 +76,32 @@ inline std::string matrixOperation(const char* target, std::size_t row,
     return stream.str();
 }
 
-inline std::string vectorOperation(std::size_t row, const char* operation,
-                                   double value) {
+inline std::string vectorOperation(const char* target, std::size_t row,
+                                   const char* operation, double value) {
     std::ostringstream stream;
-    stream << "i[" << row << "] " << operation << ' ' << value;
+    stream << target << '[' << row << "] " << operation << ' ' << value;
     return stream.str();
 }
 
 }  // namespace detail
 
-/// Assemble and solve G*v=i using resistor and current-source stamps.
+/// Assemble and solve the Modified Nodal Analysis system A*x=z.
 inline DcResult solveDc(const Circuit& circuit) {
     const std::vector<std::string>& nodes = circuit.nodes();
     if (nodes.empty()) {
         throw std::invalid_argument("circuit has no non-ground nodes");
     }
 
+    std::vector<std::string> voltageSourceNames;
+    for (const VoltageSource& source : circuit.voltageSources()) {
+        voltageSourceNames.push_back(source.name);
+    }
+    const std::size_t systemSize =
+        nodes.size() + circuit.voltageSources().size();
     DcResult result{nodes,
-                    DenseMatrix(nodes.size()),
-                    std::vector<double>(nodes.size(), 0.0),
+                    voltageSourceNames,
+                    DenseMatrix(systemSize),
+                    std::vector<double>(systemSize, 0.0),
                     {},
                     {}};
 
@@ -93,18 +112,18 @@ inline DcResult solveDc(const Circuit& circuit) {
         StampTrace trace{resistor.name + " (resistor)", {}};
 
         if (positive) {
-            result.conductanceMatrix(*positive, *positive) += conductance;
+            result.systemMatrix(*positive, *positive) += conductance;
             trace.operations.push_back(detail::matrixOperation(
                 "G", *positive, *positive, "+=", conductance));
         }
         if (negative) {
-            result.conductanceMatrix(*negative, *negative) += conductance;
+            result.systemMatrix(*negative, *negative) += conductance;
             trace.operations.push_back(detail::matrixOperation(
                 "G", *negative, *negative, "+=", conductance));
         }
         if (positive && negative) {
-            result.conductanceMatrix(*positive, *negative) -= conductance;
-            result.conductanceMatrix(*negative, *positive) -= conductance;
+            result.systemMatrix(*positive, *negative) -= conductance;
+            result.systemMatrix(*negative, *positive) -= conductance;
             trace.operations.push_back(detail::matrixOperation(
                 "G", *positive, *negative, "-=", conductance));
             trace.operations.push_back(detail::matrixOperation(
@@ -121,20 +140,50 @@ inline DcResult solveDc(const Circuit& circuit) {
         // Current leaving the positive node is a negative node injection;
         // current entering the negative node is a positive node injection.
         if (positive) {
-            result.currentVector[*positive] -= source.currentAmps;
-            trace.operations.push_back(
-                detail::vectorOperation(*positive, "-=", source.currentAmps));
+            result.rightHandSide[*positive] -= source.currentAmps;
+            trace.operations.push_back(detail::vectorOperation(
+                "z", *positive, "-=", source.currentAmps));
         }
         if (negative) {
-            result.currentVector[*negative] += source.currentAmps;
-            trace.operations.push_back(
-                detail::vectorOperation(*negative, "+=", source.currentAmps));
+            result.rightHandSide[*negative] += source.currentAmps;
+            trace.operations.push_back(detail::vectorOperation(
+                "z", *negative, "+=", source.currentAmps));
         }
         result.stamps.push_back(std::move(trace));
     }
 
-    result.nodeVoltages =
-        solveLinearSystem(result.conductanceMatrix, result.currentVector);
+    for (std::size_t sourceIndex = 0;
+         sourceIndex < circuit.voltageSources().size(); ++sourceIndex) {
+        const VoltageSource& source = circuit.voltageSources()[sourceIndex];
+        const auto positive = detail::nodeIndex(nodes, source.positiveNode);
+        const auto negative = detail::nodeIndex(nodes, source.negativeNode);
+        const std::size_t branch = nodes.size() + sourceIndex;
+        StampTrace trace{source.name + " (voltage source)", {}};
+
+        if (positive) {
+            result.systemMatrix(*positive, branch) += 1.0;
+            result.systemMatrix(branch, *positive) += 1.0;
+            trace.operations.push_back(
+                detail::matrixOperation("A", *positive, branch, "+=", 1.0));
+            trace.operations.push_back(
+                detail::matrixOperation("A", branch, *positive, "+=", 1.0));
+        }
+        if (negative) {
+            result.systemMatrix(*negative, branch) -= 1.0;
+            result.systemMatrix(branch, *negative) -= 1.0;
+            trace.operations.push_back(
+                detail::matrixOperation("A", *negative, branch, "-=", 1.0));
+            trace.operations.push_back(
+                detail::matrixOperation("A", branch, *negative, "-=", 1.0));
+        }
+        result.rightHandSide[branch] += source.voltageVolts;
+        trace.operations.push_back(
+            detail::vectorOperation("z", branch, "+=", source.voltageVolts));
+        result.stamps.push_back(std::move(trace));
+    }
+
+    result.solution =
+        solveLinearSystem(result.systemMatrix, result.rightHandSide);
     return result;
 }
 
