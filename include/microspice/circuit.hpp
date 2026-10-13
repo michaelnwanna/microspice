@@ -34,6 +34,13 @@ struct VoltageSource {
     double voltageVolts;
 };
 
+struct Capacitor {
+    std::string name;
+    std::string positiveNode;
+    std::string negativeNode;
+    double capacitanceFarads;
+};
+
 class Circuit {
 public:
     void addResistor(std::string name, std::string positiveNode,
@@ -70,6 +77,18 @@ public:
                                    std::move(negativeNode), voltageVolts});
     }
 
+    void addCapacitor(std::string name, std::string positiveNode,
+                      std::string negativeNode, double capacitanceFarads) {
+        if (!std::isfinite(capacitanceFarads) || capacitanceFarads <= 0.0) {
+            throw std::invalid_argument(
+                "capacitance must be finite and greater than zero");
+        }
+        registerNode(positiveNode);
+        registerNode(negativeNode);
+        capacitors_.push_back({std::move(name), std::move(positiveNode),
+                               std::move(negativeNode), capacitanceFarads});
+    }
+
     const std::vector<std::string>& nodes() const noexcept { return nodes_; }
     const std::vector<Resistor>& resistors() const noexcept {
         return resistors_;
@@ -79,6 +98,9 @@ public:
     }
     const std::vector<VoltageSource>& voltageSources() const noexcept {
         return voltageSources_;
+    }
+    const std::vector<Capacitor>& capacitors() const noexcept {
+        return capacitors_;
     }
 
 private:
@@ -105,6 +127,7 @@ private:
     std::vector<Resistor> resistors_;
     std::vector<CurrentSource> currentSources_;
     std::vector<VoltageSource> voltageSources_;
+    std::vector<Capacitor> capacitors_;
 };
 
 }  // namespace microspice

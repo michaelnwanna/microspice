@@ -1,11 +1,15 @@
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <sstream>
 #include <stdexcept>
 
 #include "microspice/circuit.hpp"
+#include "microspice/csv.hpp"
 #include "microspice/dc_solver.hpp"
 #include "microspice/linear_solver.hpp"
 #include "microspice/netlist.hpp"
+#include "microspice/transient_solver.hpp"
 
 namespace {
 
@@ -109,6 +113,90 @@ void test_voltage_source_uses_mna_branch_unknown() {
     CHECK(near(result.currentThrough("V1"), -5e-3));
 }
 
+void test_capacitor_validation() {
+    microspice::Circuit circuit;
+    circuit.addCapacitor("C1", "out", "0", 1e-6);
+    CHECK(circuit.capacitors().size() == 1);
+    CHECK(near(circuit.capacitors()[0].capacitanceFarads, 1e-6));
+
+    bool rejectedZero = false;
+    try {
+        circuit.addCapacitor("Cbad", "out", "0", 0.0);
+    } catch (const std::invalid_argument&) {
+        rejectedZero = true;
+    }
+    CHECK(rejectedZero);
+}
+
+microspice::Circuit makeRcChargingCircuit() {
+    microspice::Circuit circuit;
+    circuit.addVoltageSource("V1", "in", "0", 10.0);
+    circuit.addResistor("R1", "in", "out", 1e3);
+    circuit.addCapacitor("C1", "out", "0", 1e-6);
+    return circuit;
+}
+
+void test_backward_euler_first_rc_step() {
+    const auto transient =
+        microspice::solveTransient(makeRcChargingCircuit(), {1e-3, 1e-3, {}});
+
+    CHECK(transient.samples.size() == 1);
+    CHECK(near(transient.voltage(0, "out"), 5.0));
+    CHECK(near(transient.samples[0].capacitors[0].equivalentConductance, 1e-3));
+    CHECK(near(transient.samples[0].capacitors[0].historyCurrent, 0.0));
+}
+
+void test_initial_capacitor_voltage_drives_discharge() {
+    microspice::Circuit circuit;
+    circuit.addResistor("R1", "out", "0", 1e3);
+    circuit.addCapacitor("C1", "out", "0", 1e-6);
+
+    const auto transient =
+        microspice::solveTransient(circuit, {1e-3, 1e-3, {10.0}});
+
+    CHECK(near(transient.voltage(0, "out"), 5.0));
+    CHECK(near(transient.samples[0].capacitors[0].previousVoltage, 10.0));
+    CHECK(near(transient.samples[0].capacitors[0].historyCurrent, 0.01));
+}
+
+void test_rc_charging_is_monotonic_and_approaches_supply() {
+    const auto transient =
+        microspice::solveTransient(makeRcChargingCircuit(), {1e-4, 5e-3, {}});
+
+    double previous = 0.0;
+    for (std::size_t index = 0; index < transient.samples.size(); ++index) {
+        const double voltage = transient.voltage(index, "out");
+        CHECK(voltage > previous);
+        CHECK(voltage < 10.0);
+        previous = voltage;
+    }
+    const double analytical = 10.0 * (1.0 - std::exp(-5.0));
+    CHECK(std::abs(previous - analytical) < 0.03);
+}
+
+void test_transient_options_are_validated() {
+    bool rejected = false;
+    try {
+        static_cast<void>(microspice::solveTransient(makeRcChargingCircuit(),
+                                                     {0.0, 1e-3, {}}));
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    CHECK(rejected);
+}
+
+void test_transient_csv_header_and_rows() {
+    const auto transient =
+        microspice::solveTransient(makeRcChargingCircuit(), {1e-3, 2e-3, {}});
+    std::ostringstream csv;
+    microspice::writeTransientCsv(csv, transient);
+    const std::string text = csv.str();
+
+    CHECK(text.find("time_s,V(in),V(out)\n") == 0);
+    CHECK(static_cast<std::size_t>(
+              std::count(text.begin(), text.end(), '\n')) == 3);
+}
+
 void test_engineering_values() {
     CHECK(near(microspice::parseEngineeringValue("1k"), 1e3));
     CHECK(near(microspice::parseEngineeringValue("4.7u"), 4.7e-6));
@@ -131,6 +219,33 @@ R3 out 0 1
     CHECK(circuit.voltageSources().size() == 1);
     CHECK(near(result.voltage("out"), 5.0));
     CHECK(near(result.currentThrough("V1"), -5e-3));
+}
+
+void test_parse_capacitor_and_transient_directive() {
+    const auto parsed = microspice::parseNetlistDocument(R"(
+V1 in 0 5
+R1 in out 1k
+C1 out 0 1u
+.tran 100u 5m
+.end
+)");
+
+    CHECK(parsed.circuit.capacitors().size() == 1);
+    CHECK(near(parsed.circuit.capacitors()[0].capacitanceFarads, 1e-6));
+    CHECK(parsed.transient.has_value());
+    CHECK(near(parsed.transient->timeStepSeconds, 1e-4));
+    CHECK(near(parsed.transient->stopTimeSeconds, 5e-3));
+}
+
+void test_invalid_transient_directive_reports_line() {
+    bool rejected = false;
+    try {
+        static_cast<void>(
+            microspice::parseNetlistDocument("R1 out 0 1k\n.tran 0 1m\n"));
+    } catch (const microspice::NetlistError& error) {
+        rejected = error.line() == 2;
+    }
+    CHECK(rejected);
 }
 
 void test_netlist_errors_report_line() {
@@ -160,8 +275,16 @@ int main() {
     test_two_node_resistor_network();
     test_floating_circuit_is_singular();
     test_voltage_source_uses_mna_branch_unknown();
+    test_capacitor_validation();
+    test_backward_euler_first_rc_step();
+    test_initial_capacitor_voltage_drives_discharge();
+    test_rc_charging_is_monotonic_and_approaches_supply();
+    test_transient_options_are_validated();
+    test_transient_csv_header_and_rows();
     test_engineering_values();
     test_parse_and_solve_voltage_divider();
+    test_parse_capacitor_and_transient_directive();
+    test_invalid_transient_directive_reports_line();
     test_netlist_errors_report_line();
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

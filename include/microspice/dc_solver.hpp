@@ -85,8 +85,8 @@ inline std::string vectorOperation(const char* target, std::size_t row,
 
 }  // namespace detail
 
-/// Assemble and solve the Modified Nodal Analysis system A*x=z.
-inline DcResult solveDc(const Circuit& circuit) {
+/// Assemble the static-device portion of A*x=z without solving it.
+inline DcResult assembleDcSystem(const Circuit& circuit) {
     const std::vector<std::string>& nodes = circuit.nodes();
     if (nodes.empty()) {
         throw std::invalid_argument("circuit has no non-ground nodes");
@@ -182,6 +182,12 @@ inline DcResult solveDc(const Circuit& circuit) {
         result.stamps.push_back(std::move(trace));
     }
 
+    return result;
+}
+
+/// Assemble and solve the Modified Nodal Analysis system A*x=z.
+inline DcResult solveDc(const Circuit& circuit) {
+    DcResult result = assembleDcSystem(circuit);
     result.solution =
         solveLinearSystem(result.systemMatrix, result.rightHandSide);
     return result;

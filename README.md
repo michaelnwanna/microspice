@@ -6,12 +6,12 @@
 
 [![CI](https://github.com/michaelnwanna/microspice/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 ![C++17](https://img.shields.io/badge/C%2B%2B-17-blue)
-![Phase](https://img.shields.io/badge/phase-2%20MNA%20%2B%20netlists-teal)
+![Phase](https://img.shields.io/badge/phase-3%20transient%20analysis-teal)
 
-## Current phase: netlists and Modified Nodal Analysis
+## Current phase: capacitor transient analysis
 
-microspice solves linear DC circuits containing resistors and independent current
-and voltage sources. Phase 2 includes:
+microspice solves linear DC and time-domain circuits containing resistors,
+capacitors, and independent current and voltage sources. Phase 3 includes:
 
 - a dense matrix type,
 - Gaussian elimination with partial pivoting,
@@ -20,13 +20,18 @@ and voltage sources. Phase 2 includes:
 - ideal voltage sources and their solved branch currents,
 - a strict SPICE-like netlist parser with line-numbered errors,
 - engineering values such as `1k`, `4.7u`, and `2meg`,
+- backward-Euler capacitor companion models,
+- `.tran` analysis directives and CSV waveform export,
+- configurable initial capacitor voltages,
+- per-timestep matrix, right-hand side, and capacitor-history diagnostics,
+- an RC walkthrough checked against the analytical charging curve,
 - detection of floating or otherwise singular circuits,
 - an inspectable result containing the full MNA system and solution,
 - dependency-free tests derived from Ohm's law, and
 - CLI tools for programmatic and text-netlist workflows.
 
-The component set remains deliberately small. Capacitors and diodes arrive only
-after the linear DC foundation and its text boundary are testable and visible.
+The component set remains deliberately small. Diodes arrive only after the
+linear and time-domain foundations are testable and visible.
 
 ## Quick start
 
@@ -35,7 +40,9 @@ cmake -S . -B build
 cmake --build build
 ctest --test-dir build --output-on-failure
 ./build/dc_walkthrough
+./build/transient_walkthrough
 ./build/microspice_cli examples/voltage_divider.cir
+./build/microspice_cli examples/rc_charging.cir > rc.csv
 ```
 
 The example constructs this network:
@@ -125,6 +132,22 @@ See [Phase 2: MNA and Netlists](docs/phase-2-mna-netlists.md) for the augmented
 matrix derivation, source stamp, parser grammar, suffix table, and sign
 conventions.
 
+## How a capacitor becomes a matrix stamp
+
+A capacitor obeys $i=C\,dv/dt$. Backward Euler approximates the derivative over
+one timestep and rearranges the result into a conductance plus a history source:
+
+```text
+G_eq      = C / dt
+I_history = G_eq * V_previous
+i_new     = G_eq * V_new - I_history
+```
+
+That companion model can be stamped into the same MNA system as the DC devices.
+After each solve, the capacitor voltage becomes the history value for the next
+step. See [Phase 3: Transient Analysis](docs/phase-3-transient-analysis.md) for
+the derivation, RC example, accuracy discussion, and API details.
+
 ## Library API
 
 The simulation core does not depend on terminal or GUI code:
@@ -140,6 +163,14 @@ circuit.addResistor("R2", "out", "0", 1e3);
 
 const auto result = microspice::solveDc(circuit);
 const double outputVoltage = result.voltage("out");
+```
+
+Transient analysis uses the same circuit:
+
+```cpp
+circuit.addCapacitor("C1", "out", "0", 1e-6);
+const auto waveform = microspice::solveTransient(circuit, {1e-4, 5e-3, {}});
+const double firstSample = waveform.voltage(0, "out");
 ```
 
 `DcResult` also retains the assembled matrix, right-hand side, complete solution,
@@ -178,7 +209,7 @@ Parse a small SPICE-like text format, support engineering suffixes (`1k`,
 `10u`), and introduce Modified Nodal Analysis for ideal voltage sources.
 **Complete.**
 
-### Phase 3 - Time-domain simulation
+### Phase 3 - Time-domain simulation (complete)
 
 Add capacitors, backward-Euler integration, transient analysis, CSV export, and
 RC charging/discharging examples checked against analytical solutions.
@@ -201,7 +232,8 @@ devices, benchmarks, and comparisons against established SPICE implementations.
 
 ## What this is not yet
 
-This is not a replacement for production SPICE software. Phase 2 supports no
-capacitors, inductors, controlled sources, nonlinear devices, or simulation
-directives beyond `.end`. Those limitations are explicit so each later feature
-arrives with its mathematics, tests, and failure modes explained.
+This is not a replacement for production SPICE software. Phase 3 supports no
+inductors, controlled sources, nonlinear devices, adaptive timesteps, or
+simulation directives beyond `.tran` and `.end`. Those limitations are explicit
+so each later feature arrives with its mathematics, tests, and failure modes
+explained.

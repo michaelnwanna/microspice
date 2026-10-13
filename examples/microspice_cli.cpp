@@ -3,11 +3,14 @@
 #include <cstddef>
 #include <cstdio>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 #include <string>
 
+#include "microspice/csv.hpp"
 #include "microspice/dc_solver.hpp"
 #include "microspice/netlist.hpp"
+#include "microspice/transient_solver.hpp"
 
 int main(int argc, char* argv[]) {
     if (argc != 2) {
@@ -24,9 +27,19 @@ int main(int argc, char* argv[]) {
     contents << file.rdbuf();
 
     try {
-        const microspice::Circuit circuit =
-            microspice::parseNetlist(contents.str());
-        const microspice::DcResult result = microspice::solveDc(circuit);
+        const microspice::ParsedNetlist parsed =
+            microspice::parseNetlistDocument(contents.str());
+        if (parsed.transient) {
+            const microspice::TransientResult result =
+                microspice::solveTransient(parsed.circuit,
+                                           {parsed.transient->timeStepSeconds,
+                                            parsed.transient->stopTimeSeconds,
+                                            {}});
+            microspice::writeTransientCsv(std::cout, result);
+            return 0;
+        }
+
+        const microspice::DcResult result = microspice::solveDc(parsed.circuit);
 
         std::printf("DC operating point\n");
         for (const std::string& node : result.nodeNames) {

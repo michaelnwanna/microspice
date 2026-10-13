@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstddef>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -26,6 +27,16 @@ public:
 
 private:
     std::size_t line_;
+};
+
+struct TransientDirective {
+    double timeStepSeconds;
+    double stopTimeSeconds;
+};
+
+struct ParsedNetlist {
+    Circuit circuit;
+    std::optional<TransientDirective> transient;
 };
 
 inline std::string lowercase(std::string text) {
@@ -98,9 +109,9 @@ inline double parseValueAtLine(const std::string& text, std::size_t line) {
 
 }  // namespace detail
 
-/// Parse R, I, and V records. Source values may optionally include "DC".
-inline Circuit parseNetlist(const std::string& text) {
-    Circuit circuit;
+/// Parse circuit records and analysis directives into a complete document.
+inline ParsedNetlist parseNetlistDocument(const std::string& text) {
+    ParsedNetlist parsed;
     std::istringstream input(text);
     std::string lineText;
     std::size_t lineNumber = 0;
@@ -119,6 +130,29 @@ inline Circuit parseNetlist(const std::string& text) {
             break;
         }
 
+        if (lowercase(tokens[0]) == ".tran") {
+            if (tokens.size() != 3) {
+                throw NetlistError(
+                    lineNumber,
+                    "transient syntax is: .tran timestep stop-time");
+            }
+            if (parsed.transient) {
+                throw NetlistError(lineNumber,
+                                   "only one .tran directive is allowed");
+            }
+            const double timeStep =
+                detail::parseValueAtLine(tokens[1], lineNumber);
+            const double stopTime =
+                detail::parseValueAtLine(tokens[2], lineNumber);
+            if (timeStep <= 0.0 || stopTime < timeStep) {
+                throw NetlistError(
+                    lineNumber,
+                    ".tran requires a positive timestep and stop >= timestep");
+            }
+            parsed.transient = TransientDirective{timeStep, stopTime};
+            continue;
+        }
+
         try {
             const char type = static_cast<char>(
                 std::toupper(static_cast<unsigned char>(tokens[0][0])));
@@ -129,7 +163,20 @@ inline Circuit parseNetlist(const std::string& text) {
                         "resistor syntax is: Rname positive negative "
                         "resistance");
                 }
-                circuit.addResistor(
+                parsed.circuit.addResistor(
+                    tokens[0], tokens[1], tokens[2],
+                    detail::parseValueAtLine(tokens[3], lineNumber));
+                continue;
+            }
+
+            if (type == 'C') {
+                if (tokens.size() != 4) {
+                    throw NetlistError(
+                        lineNumber,
+                        "capacitor syntax is: Cname positive negative "
+                        "capacitance");
+                }
+                parsed.circuit.addCapacitor(
                     tokens[0], tokens[1], tokens[2],
                     detail::parseValueAtLine(tokens[3], lineNumber));
                 continue;
@@ -147,11 +194,11 @@ inline Circuit parseNetlist(const std::string& text) {
                 const double value =
                     detail::parseValueAtLine(tokens[valueIndex], lineNumber);
                 if (type == 'I') {
-                    circuit.addCurrentSource(tokens[0], tokens[1], tokens[2],
-                                             value);
+                    parsed.circuit.addCurrentSource(tokens[0], tokens[1],
+                                                    tokens[2], value);
                 } else {
-                    circuit.addVoltageSource(tokens[0], tokens[1], tokens[2],
-                                             value);
+                    parsed.circuit.addVoltageSource(tokens[0], tokens[1],
+                                                    tokens[2], value);
                 }
                 continue;
             }
@@ -164,7 +211,12 @@ inline Circuit parseNetlist(const std::string& text) {
             throw NetlistError(lineNumber, error.what());
         }
     }
-    return circuit;
+    return parsed;
+}
+
+/// Compatibility helper for clients interested only in circuit records.
+inline Circuit parseNetlist(const std::string& text) {
+    return parseNetlistDocument(text).circuit;
 }
 
 }  // namespace microspice

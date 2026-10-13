@@ -1,0 +1,6 @@
+* A 1 ms time-constant RC circuit charging toward 10 V.
+V1 in 0 10
+R1 in out 1k
+C1 out 0 1u
+.tran 100u 5m
+.end
