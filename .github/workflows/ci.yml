@@ -63,7 +63,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
-            qt-arch: gcc_64
+            qt-arch: linux_gcc_64
           - os: macos-14
             qt-arch: clang_64
           - os: windows-2022
