@@ -399,6 +399,7 @@ public:
         const auto bytes = file.read(sourceLimit + 1);
         if (file.error() != QFileDevice::NoError)
             return fail(file.errorString());
+        file.close();
         if (bytes.size() > sourceLimit) return fail("Source exceeds 1 MiB");
         QStringDecoder decoder(QStringDecoder::Utf8,
                                QStringConverter::Flag::Stateless);
