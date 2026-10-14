@@ -222,6 +222,14 @@ diagnostic results. Editing waveform settings clears the corresponding waveform
 results. Select/Probe alone do not invalidate results. Closing cancels and waits
 for active work; assembly or final UI operations can briefly delay cancellation.
 
+## Browser Workspace
+
+The optional browser app uses the same script compiler and solver without Qt.
+It is a separate local, script-based interface rather than a port of the visual
+schematic editor. See the [browser guide](web-workspace.md) for build/start,
+source downloads, local drafts, plots, cancellation and security limits. Desktop
+menu commands in this document apply only to the Qt app. AC remains deferred.
+
 ## Script Workspace
 
 Open **Tools > Script Workspace** to write and run `.msim` simulation programs.

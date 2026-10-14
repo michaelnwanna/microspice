@@ -156,6 +156,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  web:
+    name: browser bridge & service
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure web
+        run: cmake -S . -B build-web -G Ninja -DMS_BUILD_WEB=ON -DMS_BUILD_GUI=OFF
+      - name: Build web and core
+        run: cmake --build build-web --parallel 4
+      - name: Test web and core
+        run: ctest --test-dir build-web --output-on-failure --timeout 120
+
   format:
     name: clang-format check
     runs-on: ubuntu-24.04

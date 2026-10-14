@@ -16,6 +16,7 @@ endif()
 
 option(MS_BUILD_TESTING "Build tests" ON)
 option(MS_BUILD_GUI "Build the Qt 6 schematic editor" OFF)
+option(MS_BUILD_WEB "Build the local browser simulator bridge" OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerWarnings)
@@ -59,4 +60,8 @@ endif()
 
 if(MS_BUILD_GUI)
   add_subdirectory(gui)
+endif()
+
+if(MS_BUILD_WEB)
+  add_subdirectory(web)
 endif()

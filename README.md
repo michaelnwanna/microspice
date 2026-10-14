@@ -6,12 +6,12 @@
 
 [![CI](https://github.com/michaelnwanna/microspice/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 ![C++17](https://img.shields.io/badge/C%2B%2B-17-blue)
-![Phase](https://img.shields.io/badge/phase-5%20desktop%20GUI-teal)
+![Workspaces](https://img.shields.io/badge/workspaces-desktop%20%2B%20browser-teal)
 
-## Current phase: desktop GUI foundation
+## Current Capabilities
 
 microspice solves linear and nonlinear DC circuits plus linear capacitor
-transients. Phase 4 includes:
+transients. The numerical core includes:
 
 - a dense matrix type,
 - Gaussian elimination with partial pivoting,
@@ -46,6 +46,35 @@ the same tested `Circuit` API. Versioned JSON project files, atomic saves,
 undo/redo, connected component movement, transient and DC-sweep controls,
 waveform plots, CSV export, interactive voltage/current probes, and a
 matrix/Newton inspector are implemented. Qt stays outside the core.
+
+Desktop examples, offline help, background cancellation, and the independent
+`.msim` Script Workspace are implemented. Windows and macOS test packages pass
+hosted deployment checks; public release compliance and signing remain separate.
+
+An optional local browser Script Workspace uses the same C++ compiler and solvers
+through a loopback-only Python service. It supports source files, examples,
+diagnostics, named analyses, waveform inspection, samples, checks and CSV export.
+It is not a WebAssembly build or a browser schematic editor.
+
+## Browser Workspace
+
+Requires CMake 3.20+, a C++17 compiler, and Python 3.9+. The optional JSON adapter
+dependency (nlohmann/json 3.11.3, MIT) is fetched on the first configure; the core
+and desktop builds do not gain that dependency.
+
+```bash
+cmake -S . -B build-web -DMS_BUILD_WEB=ON -DMS_BUILD_GUI=OFF
+cmake --build build-web --parallel 4
+ctest --test-dir build-web --output-on-failure
+python3 web/server.py --port 8765
+```
+
+Open **http://127.0.0.1:8765**. For Windows or a multi-configuration generator,
+pass `--bridge` with the built `microspice_web_bridge.exe` path. Use `--port` to
+select an unused port. No Node.js, Qt, account, or CDN is required at runtime.
+See the [web usage guide](docs/web-workspace.md) for document handling,
+limitations, security boundaries, and deployment details. AC analysis is deferred
+until after this browser milestone.
 
 ## GUI preview
 
@@ -565,15 +594,16 @@ const double diodeVoltage = nonlinear.operatingPoint.voltage("out");
 
 `DcResult` also retains the assembled matrix, right-hand side, complete solution,
 source-current names, and every stamp. That data is useful for tests today and
-can power a matrix inspector in the future GUI without coupling the solver to
-Qt.
+powers the desktop matrix inspector without coupling the solver to Qt. The
+first browser workspace displays observations and measurements, not solver matrices.
 
 ## Architecture
 
 ```text
-Qt GUI foundation    CLI examples          netlist parser
-      |                   |                       |
-      +-------------------+-----------------------+
+Qt schematic editor     Browser workspace      CLI tools
+      |                  Python/JSON bridge         |
+      |                         |                  |
+      +-------------- Script compiler / netlist parser
                           |
                     public Circuit API
                           |
@@ -583,8 +613,8 @@ Qt GUI foundation    CLI examples          netlist parser
 ```
 
 The dependency direction always points toward the numerical core. A schematic
-editor will translate symbols and wires into a `Circuit`; it will never contain
-the simulation equations itself.
+editor translates symbols and wires into a `Circuit`; neither UI contains
+simulation equations. Scripts lower directly to the same circuit model.
 
 ## Development phases
 
@@ -609,17 +639,29 @@ RC charging/discharging examples checked against analytical solutions.
 Add the Shockley diode equation, Newton-Raphson linearization, convergence
 diagnostics, DC sweeps, diode curves, clippers, and rectifiers.
 
-### Phase 5 - Desktop GUI (in progress)
+### Phase 5 - Desktop GUI and scripts (delivered)
 
 Implemented: optional Qt Widgets target, component placement, schematic
 canvas, properties, orthogonal wires, node extraction, rotation/deletion,
 pan/zoom, linear/nonlinear DC controls and results, project save/load,
 unsaved-change guards, undo/redo, connected movement, transient/sweep controls,
-waveform plotting, CSV export, and offscreen tests.
+waveform plotting, CSV export, probes, matrix/Newton inspection, cancellable
+background analysis, offline examples/help, macOS/Windows test packaging, and
+an independent Script Workspace. The script compiler supports typed units,
+parameters, subcircuits, measurements and checks through CLI and desktop.
 
-Build a Qt 6 schematic editor with wires, component properties, probes,
-waveform plots, undo/redo, project files, and an educational matrix/iteration
-inspector. The GUI will consume the same tested core API.
+### Browser Workspace (local implementation)
+
+Script-based browser editor, shared C++ engine, local source open/download,
+compile/run/stop, named analyses, diagnostics, waveform zoom/pan/cursor, sample
+tables and CSV downloads. The local service is not a public multi-user host;
+standalone WebAssembly, visual schematic editing, and matrix inspection are not
+implemented in the browser.
+
+### Next - AC analysis (deferred)
+
+Implement linear complex-valued MNA, frequency sweeps and magnitude/phase
+results after the browser workflow is stabilized. AC remains unsupported today.
 
 ### Phase 6 - Scale and performance
 

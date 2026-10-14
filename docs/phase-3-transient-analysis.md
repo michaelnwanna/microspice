@@ -121,6 +121,7 @@ simulated voltage, analytical voltage, and error at selected points.
 - each capacitor's previous voltage, equivalent conductance, history current,
   and solved voltage.
 
-This is intentionally richer than a voltage-only waveform. A future GUI can
-plot node voltages while also explaining the exact companion model and matrix
-that produced any selected point, without duplicating solver logic.
+This is intentionally richer than a voltage-only waveform. The desktop GUI
+plots node voltages and explains the exact companion model and matrix that
+produced a selected point, without duplicating solver logic. The browser
+workspace currently plots observations without the matrix inspector.

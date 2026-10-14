@@ -3,7 +3,9 @@
 Microspice Script is a small declarative circuit language. Files use `.msim`.
 It builds the same circuit model as the schematic editor, without Qt or an
 intermediate SPICE-text conversion. It is available through the CLI and the
-desktop Script Workspace. Existing `.cir` netlists and `.microspice` JSON
+desktop Script Workspace, and the optional local browser workspace. See the
+[browser guide](web-workspace.md) for its build and document workflow.
+Existing `.cir` netlists and `.microspice` JSON
 projects keep their own syntax and tools.
 
 ## Desktop Script Workspace

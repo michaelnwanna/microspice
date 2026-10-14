@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Untitled.msim - microspice</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">microspice <span>Script Workspace</span></div>
+    <div class="header-actions"><span id="health" class="connection">Connecting</span><button id="help-button" title="Open help">Help</button></div>
+  </header>
+  <main>
+    <section class="source-pane" aria-label="Simulation source">
+      <div class="toolbar file-toolbar" aria-label="File controls">
+        <button id="new" title="New script"><img src="/icons/file-plus-2.png" alt="">New</button>
+        <button id="open" title="Open script"><img src="/icons/folder-open.png" alt="">Open</button>
+        <button id="save" title="Download script"><img src="/icons/save.png" alt="">Download</button>
+        <label class="sr-only" for="examples">Examples</label><select id="examples" disabled><option value="">Examples</option></select>
+        <input id="file-input" type="file" accept=".msim" hidden>
+      </div>
+      <div class="document-bar"><strong id="filename">Untitled.msim</strong><span id="modified" aria-label="Saved state">Saved</span><button id="find-button" title="Find in source">Find</button></div>
+      <form id="find-form" class="find-bar" hidden><label for="find-input">Find</label><input id="find-input" type="search" autocomplete="off"><button type="submit">Next</button><span id="find-status" role="status"></span><button id="find-close" type="button" title="Close find" aria-label="Close find">&times;</button></form>
+      <div class="editor"><pre id="gutter" aria-hidden="true">1</pre><textarea id="source" aria-label="Simulation script source" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off"></textarea></div>
+      <div class="editor-footer"><span id="position">Ln 1, Col 1</span><span>UTF-8 <span class="separator">/</span> MSIM</span></div>
+      <div class="diagnostic-heading">Diagnostics <span id="diagnostic-count">0</span></div>
+      <ul id="diagnostics" aria-label="Source diagnostics"><li class="empty">No diagnostics</li></ul>
+    </section>
+    <section class="output-pane" aria-label="Simulation output">
+      <div class="toolbar run-toolbar" aria-label="Simulation controls">
+        <button id="compile" title="Compile script" disabled><img src="/icons/cable.png" alt="">Compile</button>
+        <button id="run" class="primary" title="Run analysis" disabled><img src="/icons/play.png" alt="">Run</button>
+        <button id="stop" title="Stop job" disabled><img src="/icons/square.png" alt="">Stop</button>
+        <label class="sr-only" for="analysis">Analysis to run</label><select id="analysis" disabled><option value="">All analyses</option></select>
+      </div>
+      <div class="output-heading"><h1>Simulation</h1><span id="summary">No compiled source</span></div>
+      <div class="tabs" role="tablist" aria-label="Output views">
+        <button id="tab-results" role="tab" aria-selected="true" aria-controls="results-panel" tabindex="0">Results</button>
+        <button id="tab-waveform" role="tab" aria-selected="false" aria-controls="waveform-panel" tabindex="-1">Waveform</button>
+        <button id="tab-samples" role="tab" aria-selected="false" aria-controls="samples-panel" tabindex="-1">Samples</button>
+      </div>
+      <section id="results-panel" class="tab-panel" role="tabpanel" aria-labelledby="tab-results"><div id="results-content" class="empty">No simulation results</div></section>
+      <div id="trace-controls" class="trace-controls" hidden><label for="plot-analysis">Analysis</label><select id="plot-analysis" disabled><option value="">No results</option></select><label for="trace">Trace</label><select id="trace" disabled><option value="">No traces</option></select></div>
+      <section id="waveform-panel" class="tab-panel" role="tabpanel" aria-labelledby="tab-waveform" hidden>
+        <div class="toolbar plot-toolbar"><button id="zoom-in" title="Zoom in" aria-label="Zoom in" disabled><img src="/icons/zoom-in.png" alt=""></button><button id="zoom-out" title="Zoom out" aria-label="Zoom out" disabled><img src="/icons/zoom-out.png" alt=""></button><button id="fit" title="Fit waveform" disabled><img src="/icons/maximize.png" alt="">Fit</button><button id="csv" title="Export selected analysis CSV" disabled><img src="/icons/save.png" alt="">CSV</button><output id="cursor">No trace selected</output></div>
+        <div class="plot-frame"><canvas id="plot" role="img" aria-label="Waveform plot" tabindex="0"></canvas></div>
+        <div id="plot-caption" class="plot-caption">No waveform data</div>
+      </section>
+      <section id="samples-panel" class="tab-panel" role="tabpanel" aria-labelledby="tab-samples" hidden><div class="samples-heading"><h2 id="samples-title">Samples</h2><span id="samples-count">0 rows</span></div><div class="table-scroll"><table id="samples"><thead><tr><th scope="col">Sample</th><th scope="col">Axis</th><th scope="col">Value</th></tr></thead><tbody></tbody></table></div></section>
+    </section>
+  </main>
+  <footer class="status-bar"><span id="status" role="status" aria-live="polite">Connecting to engine</span><span id="job-state">Idle</span></footer>
+  <dialog id="help-dialog" aria-labelledby="help-title">
+    <div class="dialog-heading"><h2 id="help-title">Workspace Help</h2><button id="help-close" title="Close help" aria-label="Close help">&times;</button></div>
+    <h3>Source Files</h3><p>Open a UTF-8 .msim file up to 1 MiB or choose an example. Download writes the current script to a file. A local draft is restored in this browser when storage is available.</p>
+    <h3>Simulation</h3><p>Compile validates the script and lists named analyses. Run executes all analyses or the selected name. Editing source discards results and cancels a running job. Select a diagnostic to focus its source location.</p>
+    <h3>Output</h3><p>Results contains scalar values, measurements and checks. Waveform and Samples share an analysis and trace selection. Use Fit to reset the plot, the wheel to zoom, or drag to pan. CSV exports the selected analysis.</p>
+    <h3>Keyboard</h3><p>Ctrl/Cmd S downloads, Ctrl/Cmd O opens, Ctrl/Cmd F finds source text, and F5 runs. The editor uses native undo. Plot arrow keys move the cursor; + and - zoom, and Home fits.</p>
+    <nav class="doc-links" aria-label="Offline documentation"><a href="/docs/user-guide.md" target="_blank" rel="noopener">User Guide (.md)</a><a href="/docs/simulation-language.md" target="_blank" rel="noopener">Simulation Language (.md)</a><a href="/docs/web-workspace.md" target="_blank" rel="noopener">Web Workspace (.md)</a><a href="/notices" target="_blank" rel="noopener">Third-party notices</a></nav>
+  </dialog>
+</body>
+</html>

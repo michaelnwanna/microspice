@@ -140,7 +140,7 @@ test.
 The parser records the current source line. Syntax errors, invalid values, and
 component validation failures are all surfaced as `NetlistError` with that line
 number. Once parsing succeeds, the solver receives a normal `Circuit`, exactly
-as programmatic clients and the future GUI do.
+as programmatic clients and the desktop schematic editor do.
 
 This separation is important: the parser translates text, the circuit model
 owns electrical data, and the solver owns equations. No layer reimplements

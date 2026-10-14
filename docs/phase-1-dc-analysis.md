@@ -127,5 +127,5 @@ condition instead of producing meaningless voltages.
 - a text trace of every component stamp.
 
 This is more data than a minimal solver needs, intentionally. It allows tests,
-the CLI, and a future GUI to answer not only "what is the voltage?" but also
+the CLI, and the desktop inspector to answer not only "what is the voltage?" but also
 "which physical component contributed each coefficient?"

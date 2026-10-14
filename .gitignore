@@ -1,6 +1,8 @@
 # Build directories
 build/
 build-gui/
+build-web/
+__pycache__/
 out/
 cmake-build-*/
 _deps/
