@@ -1,0 +1,15 @@
+subcircuit divider(input, output, return_node, R=1kohm) {
+    resistor("R1", input, output, R)
+    resistor("R2", output, return_node, R)
+    resistor("R3", output, internal, R)
+    resistor("R4", internal, return_node, R)
+}
+voltage_source("V1", supply, ground, 10V)
+use("D1", divider, input=supply, output=midpoint, return_node=ground, R=1kohm)
+use("D2", divider, input=supply, output=other, return_node=ground, R=2kohm)
+dc("bias")
+observe("bias", voltage(midpoint), voltage("D1.internal"), voltage("D2.internal"), current("D1.R1"))
+measure("first_midpoint", from="bias", value=voltage(midpoint))
+measure("second_midpoint", from="bias", value=voltage(other))
+check("isolated identical ratios", abs(first_midpoint - second_midpoint) <= 1uV)
+check("loaded divider", abs(first_midpoint - 4V) <= 1mV)

@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/help">
+    <file alias="user-guide.md">../docs/user-guide.md</file>
+    <file alias="simulation-language.md">../docs/simulation-language.md</file>
+  </qresource>
+</RCC>

@@ -3,6 +3,7 @@
 #include <QComboBox>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QProgressBar>
@@ -19,6 +20,7 @@
 #include "background_job.hpp"
 #include "editor_scene.hpp"
 #include "microspice/netlist.hpp"
+#include "ui_style.hpp"
 #include "waveform_plot.hpp"
 
 namespace microspice::gui {
@@ -30,8 +32,11 @@ public:
     explicit AnalysisPanel(EditorScene& scene, QWidget* parent = nullptr)
         : QWidget(parent), scene_(scene) {
         auto* layout = new QVBoxLayout(this);
+        layout->setContentsMargins(10, 10, 10, 10);
+        layout->setSpacing(8);
         auto* toolbar = new QHBoxLayout;
         trace_ = new QComboBox(this);
+        trace_->setAccessibleName("Waveform trace");
         trace_->setMinimumContentsLength(12);
         trace_->setSizeAdjustPolicy(
             QComboBox::AdjustToMinimumContentsLengthWithIcon);
@@ -45,26 +50,39 @@ public:
         toolbar->addWidget(progress_);
         export_ = button("Export CSV", QStyle::SP_DialogSaveButton, toolbar);
         auto* reset =
-            button("Reset plot view", QStyle::SP_BrowserReload, toolbar);
+            button("Reset plot view", QStyle::SP_DesktopIcon, toolbar);
         layout->addLayout(toolbar);
         auto* splitter = new QSplitter(this);
+        splitter->setChildrenCollapsible(false);
+        splitter->setHandleWidth(5);
         tabs_ = new QTabWidget(splitter);
         tabs_->setMinimumWidth(220);
         auto* transient = new QWidget(tabs_);
         auto* transientForm = new QFormLayout(transient);
+        transientForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+        transientForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
+        transientForm->setSpacing(8);
         timeStep_ = new QLineEdit("100u", transient);
         stopTime_ = new QLineEdit("5m", transient);
         transientForm->addRow("Timestep (s)", timeStep_);
         transientForm->addRow("Stop (s)", stopTime_);
         initial_ = new QTableWidget(0, 2, transient);
         initial_->setHorizontalHeaderLabels({"Capacitor", "Initial V"});
-        initial_->setColumnWidth(0, 80);
-        initial_->setColumnWidth(1, 85);
+        initial_->setAccessibleName("Capacitor initial voltages");
+        initial_->verticalHeader()->hide();
+        initial_->horizontalHeader()->setSectionResizeMode(
+            0, QHeaderView::ResizeToContents);
+        initial_->horizontalHeader()->setSectionResizeMode(
+            1, QHeaderView::Stretch);
+        initial_->setAlternatingRowColors(true);
         initial_->setMinimumHeight(70);
         transientForm->addRow(initial_);
         tabs_->addTab(transient, "Transient");
         auto* sweep = new QWidget(tabs_);
         auto* sweepForm = new QFormLayout(sweep);
+        sweepForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+        sweepForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
+        sweepForm->setSpacing(8);
         source_ = new QComboBox(sweep);
         start_ = new QLineEdit("0", sweep);
         stop_ = new QLineEdit("10", sweep);
@@ -384,7 +402,11 @@ private:
     QToolButton* button(const QString& text, QStyle::StandardPixmap icon,
                         QHBoxLayout* layout) {
         auto* tool = new QToolButton(this);
-        tool->setIcon(style()->standardIcon(icon));
+        auto selectedIcon = actionIcon(icon);
+        tool->setIcon(selectedIcon.isNull() ? style()->standardIcon(icon)
+                                            : selectedIcon);
+        tool->setIconSize(QSize(22, 22));
+        tool->setFixedSize(34, 34);
         tool->setToolTip(text);
         tool->setAccessibleName(text);
         layout->addWidget(tool);

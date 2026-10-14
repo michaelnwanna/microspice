@@ -352,6 +352,13 @@ protected:
             return;
         }
         if (event->button() == Qt::LeftButton && placement_) {
+            for (auto* item : items(event->scenePos())) {
+                if (dynamic_cast<ComponentItem*>(item)) {
+                    dragging_ = true;
+                    QGraphicsScene::mousePressEvent(event);
+                    return;
+                }
+            }
             clearSelection();
             place(*placement_, event->scenePos())->setSelected(true);
             event->accept();

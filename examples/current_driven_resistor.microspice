@@ -1,0 +1,17 @@
+{
+    "format": "microspice.project",
+    "version": 1,
+    "counters": [1, 0, 0, 0, 1, 1],
+    "components": [
+        {"kind": 4, "reference": "I1", "position": [0, 0], "rotation": 180, "value": 0.002, "ideality": 1},
+        {"kind": 0, "reference": "R1", "position": [0, -120], "rotation": 0, "value": 1000, "ideality": 1},
+        {"kind": 5, "reference": "G1", "position": [60, 120], "rotation": 0, "value": 0, "ideality": 1}
+    ],
+    "wires": [
+        {"start": [-60, 0], "end": [-60, -120]},
+        {"start": [60, -120], "end": [180, -120]},
+        {"start": [180, -120], "end": [180, 120]},
+        {"start": [180, 120], "end": [60, 120]},
+        {"start": [60, 0], "end": [60, 120]}
+    ]
+}

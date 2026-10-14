@@ -13,22 +13,28 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QSettings>
 #include <QSignalBlocker>
 #include <QStatusBar>
 #include <QStyle>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QToolBar>
+#include <algorithm>
 
 #include "analysis_panel.hpp"
 #include "dc_analysis.hpp"
 #include "editor_scene.hpp"
+#include "example_catalog.hpp"
+#include "help_dialog.hpp"
 #include "inspector.hpp"
 #include "microspice/dc_solver.hpp"
 #include "microspice/netlist.hpp"
 #include "microspice/nonlinear_solver.hpp"
 #include "project_document.hpp"
 #include "project_window.hpp"
+#include "script_workspace.hpp"
+#include "ui_style.hpp"
 
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
@@ -36,6 +42,7 @@ int main(int argc, char* argv[]) {
     application.setApplicationVersion(MS_APP_VERSION);
     application.setOrganizationName("microspice");
     using namespace microspice::gui;
+    applyDesktopStyle(application);
 
     std::optional<ProjectDocument> documentStorage;
     bool inspectorFromWaveform = false;
@@ -52,15 +59,25 @@ int main(int argc, char* argv[]) {
     view->setMouseTracking(true);
     window.setCentralWidget(view);
 
-    auto* toolbar = window.addToolBar("Schematic");
-    toolbar->setMovable(false);
+    auto* projectToolbar = window.addToolBar("Project");
+    projectToolbar->setObjectName("projectToolbar");
+    projectToolbar->setMovable(false);
+    projectToolbar->setIconSize(QSize(22, 22));
     auto* title = new QLabel("  microspice  ");
-    toolbar->addWidget(title);
-    toolbar->addSeparator();
+    auto brandFont = title->font();
+    brandFont.setBold(true);
+    title->setFont(brandFont);
+    projectToolbar->addWidget(title);
+    projectToolbar->addSeparator();
+    window.addToolBarBreak();
+    auto* toolbar = window.addToolBar("Schematic");
+    toolbar->setObjectName("schematicToolbar");
+    toolbar->setMovable(false);
+    toolbar->setIconSize(QSize(24, 24));
+    toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
     const auto addAction = [&](const QString& name, QStyle::StandardPixmap icon,
                                const auto& handler) {
-        QAction* action =
-            toolbar->addAction(window.style()->standardIcon(icon), name);
+        QAction* action = toolbar->addAction(actionIcon(icon), name);
         action->setToolTip(name);
         QObject::connect(action, &QAction::triggered, &window, handler);
         return action;
@@ -79,13 +96,11 @@ int main(int argc, char* argv[]) {
             window.statusBar()->showMessage(action->toolTip());
         });
     };
-    auto* select = toolbar->addAction(
-        window.style()->standardIcon(QStyle::SP_ArrowForward), "Select");
+    auto* select = toolbar->addAction(actionIcon("mouse-pointer-2"), "Select");
     select->setToolTip("Select");
     selectTool(select, std::nullopt, false);
     select->setChecked(true);
-    auto* probe = toolbar->addAction(
-        window.style()->standardIcon(QStyle::SP_DialogApplyButton), "Probe");
+    auto* probe = toolbar->addAction(actionIcon("crosshair"), "Probe");
     probe->setToolTip(
         "Probe voltage on terminals/wires or current on a voltage-source body");
     probe->setCheckable(true);
@@ -95,17 +110,20 @@ int main(int argc, char* argv[]) {
         view->setDragMode(QGraphicsView::NoDrag);
         view->viewport()->setCursor(Qt::CrossCursor);
     });
+    toolbar->addSeparator();
     const std::array<QString, 6> toolNames = {
         "Resistor",       "Capacitor",      "Diode",
         "Voltage source", "Current source", "Ground"};
     for (std::size_t index = 0; index < toolNames.size(); ++index) {
         const auto kind = static_cast<ComponentKind>(index);
-        QPixmap pixmap(32, 32);
+        QPixmap pixmap(64, 64);
+        pixmap.setDevicePixelRatio(2);
         pixmap.fill(Qt::transparent);
         QPainter painter(&pixmap);
         painter.setRenderHint(QPainter::Antialiasing);
+        painter.setClipRect(QRectF(0, 4, 32, 24));
         painter.translate(16, 16);
-        painter.scale(0.23, 0.23);
+        painter.scale(0.52, 0.52);
         ComponentItem symbol(kind, "");
         QStyleOptionGraphicsItem option;
         symbol.paint(&painter, &option, nullptr);
@@ -114,28 +132,40 @@ int main(int argc, char* argv[]) {
         action->setToolTip(toolNames[index]);
         selectTool(action, kind, false);
     }
-    auto* wire = toolbar->addAction(
-        window.style()->standardIcon(QStyle::SP_FileLinkIcon), "Wire");
+    auto* wire = toolbar->addAction(actionIcon("cable"), "Wire");
     wire->setToolTip("Wire");
     selectTool(wire, std::nullopt, true);
     toolbar->addSeparator();
-    addAction("Rotate", QStyle::SP_BrowserReload,
-              [scene] { scene->rotateSelected(); });
-    addAction("Delete", QStyle::SP_TrashIcon, [scene] {
-        scene->removeSelected();
-    })->setShortcut(QKeySequence::Delete);
-    addAction("Zoom in", QStyle::SP_ArrowUp, [view] { view->zoomBy(1.25); });
-    addAction("Zoom out", QStyle::SP_ArrowDown, [view] { view->zoomBy(0.8); });
-    addAction("Reset view", QStyle::SP_DesktopIcon,
-              [view] { view->fitSchematic(); });
+    auto* rotate = addAction("Rotate", QStyle::SP_BrowserReload,
+                             [scene] { scene->rotateSelected(); });
+    auto* remove = addAction("Delete", QStyle::SP_TrashIcon,
+                             [scene] { scene->removeSelected(); });
+    remove->setShortcut(QKeySequence::Delete);
+    toolbar->addSeparator();
+    auto* zoomIn = addAction("Zoom in", QStyle::SP_ArrowUp,
+                             [view] { view->zoomBy(1.25); });
+    auto* zoomOut = addAction("Zoom out", QStyle::SP_ArrowDown,
+                              [view] { view->zoomBy(0.8); });
+    auto* resetView = addAction("Fit schematic", QStyle::SP_DesktopIcon,
+                                [view] { view->fitSchematic(); });
+    zoomIn->setShortcut(QKeySequence::ZoomIn);
+    zoomOut->setShortcut(QKeySequence::ZoomOut);
 
-    auto* properties = new QDockWidget("Component", &window);
-    properties->setFeatures(QDockWidget::DockWidgetMovable);
+    auto* properties = new QDockWidget("Properties", &window);
+    properties->setObjectName("propertiesDock");
     auto* panel = new QWidget(properties);
     auto* form = new QFormLayout(panel);
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    form->setContentsMargins(12, 12, 12, 12);
+    form->setSpacing(10);
     auto* reference = new QLabel(panel);
     auto* valueLabel = new QLabel("Value", panel);
     auto* value = new QLineEdit(panel);
+    value->setAccessibleName("Component value");
+    auto* valueError = new QLabel(panel);
+    valueError->setWordWrap(true);
+    valueError->setStyleSheet("color: #a12e2e;");
+    valueError->hide();
     auto* ideality = new QDoubleSpinBox(panel);
     ideality->setRange(0.01, 100);
     ideality->setDecimals(3);
@@ -143,16 +173,21 @@ int main(int argc, char* argv[]) {
     auto* idealityLabel = new QLabel("Ideality", panel);
     form->addRow("Reference", reference);
     form->addRow(valueLabel, value);
+    form->addRow(valueError);
     form->addRow(idealityLabel, ideality);
     panel->setEnabled(false);
-    panel->setMinimumWidth(240);
+    panel->setMinimumWidth(200);
+    panel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     properties->setWidget(panel);
     window.addDockWidget(Qt::RightDockWidgetArea, properties);
 
     auto* resultsDock = new QDockWidget("DC operating point", &window);
+    resultsDock->setObjectName("dcResultsDock");
     auto* results = new QPlainTextEdit(resultsDock);
     results->setReadOnly(true);
-    results->setMinimumWidth(240);
+    results->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    results->setMinimumWidth(200);
+    results->setAccessibleName("DC operating point results");
     resultsDock->setWidget(results);
     window.addDockWidget(Qt::RightDockWidgetArea, resultsDock);
     const auto selectedComponent = [scene]() -> ComponentItem* {
@@ -163,8 +198,20 @@ int main(int argc, char* argv[]) {
     };
     const auto refreshProperties = [=] {
         auto* component = selectedComponent();
+        const auto selectedItems = scene->selectedItems();
+        remove->setEnabled(!selectedItems.empty());
+        rotate->setEnabled(std::any_of(
+            selectedItems.begin(), selectedItems.end(), [](auto* item) {
+                return dynamic_cast<ComponentItem*>(item) != nullptr;
+            }));
+        valueError->hide();
+        value->setProperty("invalid", false);
+        value->style()->unpolish(value);
+        value->style()->polish(value);
         panel->setEnabled(component != nullptr);
-        reference->setText(component ? component->name() : QString());
+        reference->setText(component               ? component->name()
+                           : selectedItems.empty() ? "No selection"
+                                                   : "Multiple items");
         value->setText(component ? formatEngineeringValue(component->value())
                                  : QString());
         const bool ground =
@@ -187,7 +234,7 @@ int main(int argc, char* argv[]) {
     scene->edited = [results] { results->clear(); };
     QObject::connect(
         value, &QLineEdit::editingFinished, &window,
-        [&window, value, selectedComponent, refreshProperties] {
+        [value, valueError, selectedComponent, refreshProperties] {
             auto* component = selectedComponent();
             if (!component || component->kind() == ComponentKind::Ground) {
                 return;
@@ -203,8 +250,12 @@ int main(int argc, char* argv[]) {
                 }
                 component->setValue(parsed);
             } catch (const std::exception& error) {
-                QMessageBox::warning(&window, "Invalid value",
-                                     QString::fromUtf8(error.what()));
+                value->setProperty("invalid", true);
+                value->style()->unpolish(value);
+                value->style()->polish(value);
+                valueError->setText(QString::fromUtf8(error.what()));
+                valueError->show();
+                return;
             }
             refreshProperties();
         });
@@ -217,11 +268,13 @@ int main(int argc, char* argv[]) {
     refreshProperties();
 
     auto* waveformDock = new QDockWidget("Waveforms", &window);
+    waveformDock->setObjectName("waveformsDock");
     auto* analyses = new AnalysisPanel(*scene, waveformDock);
     waveformDock->setWidget(analyses);
     window.addDockWidget(Qt::BottomDockWidgetArea, waveformDock);
     waveformDock->hide();
     auto* inspectorDock = new QDockWidget("Solver inspector", &window);
+    inspectorDock->setObjectName("inspectorDock");
     auto* inspector = new SolverInspector(inspectorDock);
     inspectorDock->setWidget(inspector);
     window.addDockWidget(Qt::BottomDockWidgetArea, inspectorDock);
@@ -304,7 +357,7 @@ int main(int argc, char* argv[]) {
             return false;
         }
     };
-    toolbar->addSeparator();
+    auto* analysisSeparator = toolbar->addSeparator();
     auto* run = addAction("Run DC", QStyle::SP_MediaPlay, [&] {
         if (dcJob.running() || analyses->busy()) {
             return;
@@ -437,7 +490,10 @@ int main(int argc, char* argv[]) {
             },
             [saveProject] { return saveProject(false); });
     };
-    window.allowClose = confirmReplace;
+    auto* scriptWorkspace = new ScriptWorkspace(&window);
+    window.allowClose = [scriptWorkspace, confirmReplace] {
+        return scriptWorkspace->canClose() && confirmReplace();
+    };
 
     auto* fileMenu = window.menuBar()->addMenu("&File");
     auto* newProject = addAction(
@@ -485,6 +541,35 @@ int main(int argc, char* argv[]) {
     saveAs->setShortcut(QKeySequence::SaveAs);
     QObject::connect(saveAs, &QAction::triggered, &window,
                      [saveProject] { saveProject(true); });
+    auto* examplesMenu = fileMenu->addMenu("&Examples");
+    QList<QAction*> exampleActions;
+    for (const auto& example : exampleSchematics()) {
+        auto* action = examplesMenu->addAction(example.title);
+        exampleActions.push_back(action);
+        QObject::connect(action, &QAction::triggered, &window, [&, example] {
+            if (!confirmReplace()) {
+                return;
+            }
+            try {
+                document.importExample(example.resource, example.title);
+                analyses->resetInitialConditions();
+                select->trigger();
+                if (example.transient) {
+                    showAnalysis(false);
+                    analyses->setTransient("100u", "5m");
+                } else {
+                    waveformDock->hide();
+                    inspectorDock->hide();
+                }
+                view->fitSchematic();
+                updateTitle();
+                window.statusBar()->showMessage(example.title);
+            } catch (const std::exception& error) {
+                QMessageBox::warning(&window, "Cannot open example",
+                                     QString::fromUtf8(error.what()));
+            }
+        });
+    }
     fileMenu->addSeparator();
     auto* quit = fileMenu->addAction("&Quit");
     quit->setShortcut(QKeySequence::Quit);
@@ -493,24 +578,257 @@ int main(int argc, char* argv[]) {
 
     auto* editMenu = window.menuBar()->addMenu("&Edit");
     auto* undo = scene->history().createUndoAction(&window, "Undo");
-    undo->setIcon(window.style()->standardIcon(QStyle::SP_ArrowBack));
+    undo->setIcon(actionIcon(QStyle::SP_ArrowBack));
     undo->setShortcuts(QKeySequence::Undo);
     editMenu->addAction(undo);
     toolbar->addAction(undo);
     auto* redo = scene->history().createRedoAction(&window, "Redo");
-    redo->setIcon(window.style()->standardIcon(QStyle::SP_ArrowForward));
+    redo->setIcon(actionIcon(QStyle::SP_ArrowForward));
     redo->setShortcuts(QKeySequence::Redo);
     editMenu->addAction(redo);
     toolbar->addAction(redo);
     QObject::connect(&scene->history(), &QUndoStack::indexChanged, panel,
                      [refreshProperties](int) { refreshProperties(); });
+    toolbar->removeAction(analysisSeparator);
+    for (auto* action :
+         {newProject, openProject, save, undo, redo, run, cancelDc}) {
+        toolbar->removeAction(action);
+    }
+    projectToolbar->addActions({newProject, openProject, save});
+    projectToolbar->addSeparator();
+    projectToolbar->addActions({undo, redo});
+    projectToolbar->addSeparator();
+    projectToolbar->addActions({run, cancelDc});
+    window.menuBar()->removeAction(analysisMenu->menuAction());
+    auto* viewMenu = window.menuBar()->addMenu("&View");
+    viewMenu->addActions({zoomIn, zoomOut, resetView});
+    viewMenu->addSeparator();
+    for (auto* dock : {properties, resultsDock, waveformDock, inspectorDock}) {
+        viewMenu->addAction(dock->toggleViewAction());
+    }
+    window.menuBar()->addMenu(analysisMenu);
+    auto* toolsMenu = window.menuBar()->addMenu("&Tools");
+    auto* scripts =
+        toolsMenu->addAction(actionIcon("file-plus-2"), "Script &Workspace");
+    scripts->setToolTip("Script Workspace");
+    QObject::connect(scripts, &QAction::triggered, &window, [scriptWorkspace] {
+        scriptWorkspace->show();
+        scriptWorkspace->raise();
+        scriptWorkspace->activateWindow();
+    });
+    auto* helpMenu = window.menuBar()->addMenu("&Help");
+    auto* guide = new HelpDialog(&window);
+    auto* userGuide = helpMenu->addAction("&User Guide");
+    userGuide->setShortcut(QKeySequence(Qt::Key_F1));
+    QObject::connect(userGuide, &QAction::triggered, &window, [guide] {
+        guide->show();
+        guide->raise();
+        guide->activateWindow();
+    });
+    helpMenu->addSeparator();
+    auto* about = helpMenu->addAction("&About microspice");
+    about->setMenuRole(QAction::AboutRole);
+    QObject::connect(about, &QAction::triggered, &window, [&window] {
+        QMessageBox::about(&window, "About microspice",
+                           "microspice " + QApplication::applicationVersion() +
+                               "\nEducational circuit simulator\nDC, linear "
+                               "transients and source sweeps"
+                               "\nQt " +
+                               QString::fromLatin1(qVersion()));
+    });
+    auto* aboutQt = helpMenu->addAction("About &Qt");
+    aboutQt->setMenuRole(QAction::AboutQtRole);
+    QObject::connect(aboutQt, &QAction::triggered, &application,
+                     &QApplication::aboutQt);
+    window.resizeDocks({properties, resultsDock}, {150, 490}, Qt::Vertical);
+    window.resizeDocks({properties}, {260}, Qt::Horizontal);
+    const auto defaultLayout = window.saveState(1);
+    viewMenu->addSeparator();
+    auto* resetLayout = viewMenu->addAction("Reset panel layout");
+    QObject::connect(
+        resetLayout, &QAction::triggered, &window,
+        [&window, defaultLayout] { window.restoreState(defaultLayout, 1); });
+    const bool captureDemo = application.arguments().contains("--capture-demo");
+    const bool smokeTest =
+        captureDemo || application.arguments().contains("--smoke-test");
+    QSettings settings;
+    if (!smokeTest) {
+        window.restoreGeometry(
+            settings.value("desktop/geometry").toByteArray());
+        window.restoreState(settings.value("desktop/layout").toByteArray(), 1);
+        QObject::connect(
+            &application, &QCoreApplication::aboutToQuit, &window, [&] {
+                settings.setValue("desktop/geometry", window.saveGeometry());
+                settings.setValue("desktop/layout", window.saveState(1));
+            });
+    }
     updateTitle();
 
     window.statusBar()->showMessage("Voltage divider");
     window.show();
     view->fitSchematic();
-    if (application.arguments().contains("--smoke-test")) {
+    if (captureDemo) {
         QTimer::singleShot(0, &window, [&] {
+            try {
+                window.resize(1100, 800);
+                application.processEvents();
+                view->fitSchematic();
+                auto* component = scene->findComponent("R1");
+                component->setSelected(true);
+                bool successful = runDc();
+                const auto capture = [&](const QString& filename) {
+                    application.processEvents();
+                    if (!window.grab().save(
+                            QDir::current().filePath(filename))) {
+                        throw std::runtime_error("Cannot save GUI demo frame");
+                    }
+                };
+                const auto mouse =
+                    [&](QEvent::Type type, const QPointF& position,
+                        Qt::MouseButton button, Qt::MouseButtons buttons) {
+                        const QPointF local = view->mapFromScene(position);
+                        const QPointF global =
+                            view->viewport()->mapToGlobal(local.toPoint());
+                        QMouseEvent event(type, local, global, button, buttons,
+                                          Qt::NoModifier);
+                        QApplication::sendEvent(view->viewport(), &event);
+                    };
+                capture("gui-demo-editor.png");
+                for (auto* action : tools->actions()) {
+                    if (action->text() == "Resistor") {
+                        action->trigger();
+                    }
+                }
+                capture("demo-edit-00.png");
+                const auto origin = component->pos();
+                const QPointF offset(160, 80);
+                mouse(QEvent::MouseButtonPress, origin, Qt::LeftButton,
+                      Qt::LeftButton);
+                for (int frame = 1; frame <= 16; ++frame) {
+                    mouse(QEvent::MouseMove, origin + offset * (frame / 16.0),
+                          Qt::NoButton, Qt::LeftButton);
+                    capture(QString("demo-edit-%1.png")
+                                .arg(frame, 2, 10, QChar('0')));
+                }
+                mouse(QEvent::MouseButtonRelease, origin + offset,
+                      Qt::LeftButton, Qt::NoButton);
+                successful =
+                    runDc() && successful && scene->components().size() == 4 &&
+                    scene->findComponent("R1")->pos() == origin + offset;
+                capture("demo-edit-17.png");
+                undo->trigger();
+                successful = runDc() && successful &&
+                             scene->findComponent("R1")->pos() == origin;
+                capture("demo-edit-18.png");
+                select->trigger();
+                scene->clearSelection();
+                scene->findComponent("R2")->setSelected(true);
+                scene->removeSelected();
+                scene->place(ComponentKind::Capacitor, {240, -120})
+                    ->setValue(1e-6);
+                transientAction->trigger();
+                analyses->setTransient("100u", "5m");
+                successful = analyses->runAnalysis() && successful;
+                successful =
+                    analyses->selectProbe(scene->probeAt({120, -120})) &&
+                    successful &&
+                    analyses->data().traces.front().points.size() == 50;
+                application.processEvents();
+                view->fitSchematic();
+                capture("gui-demo-waveform.png");
+                auto& plot = analyses->plot();
+                for (int frame = 0; frame <= 24; ++frame) {
+                    const QPointF position(
+                        72 + (plot.width() - 92) * (frame / 24.0),
+                        plot.height() / 2.0);
+                    QMouseEvent event(QEvent::MouseMove, position,
+                                      plot.mapToGlobal(position.toPoint()),
+                                      Qt::NoButton, Qt::NoButton,
+                                      Qt::NoModifier);
+                    QApplication::sendEvent(&plot, &event);
+                    capture(QString("demo-waveform-%1.png")
+                                .arg(frame, 2, 10, QChar('0')));
+                }
+                QEvent leave(QEvent::Leave);
+                QApplication::sendEvent(&plot, &leave);
+                inspector->selectFrame(24);
+                inspectAction->trigger();
+                capture("gui-demo-inspector.png");
+                application.exit(successful ? 0 : 1);
+            } catch (const std::exception& error) {
+                qCritical("GUI demo capture failed: %s", error.what());
+                application.exit(1);
+            }
+        });
+    } else if (smokeTest) {
+        QTimer::singleShot(0, &window, [&] {
+            userGuide->trigger();
+            guide->setSearchText("capacitor");
+            const bool helpWorked =
+                guide->isVisible() &&
+                guide->content().contains("Troubleshooting") &&
+                guide->content().contains("Starter examples") &&
+                guide->findText(false) && guide->findText(true);
+            guide->selectTopic(guide->topicCount() - 1);
+            const bool helpTopicsWorked =
+                guide->topicCount() >= 18 &&
+                guide->selectedText() == "Scope and limitations";
+            guide->setSearchText("microspice User Guide");
+            const bool helpWrapped =
+                guide->findText(false) && guide->findText(false);
+            guide->selectTopic(0);
+            application.processEvents();
+            const bool helpCaptured = guide->grab().save(
+                QDir::current().filePath("gui-user-guide.png"));
+            guide->setSearchText("no-such-help-term-83925");
+            const bool missingHelpTerm = !guide->findText(false);
+            guide->close();
+            bool examplesWorked = true;
+            for (int index = 0; index < exampleActions.size(); ++index) {
+                scene->history().setClean();
+                exampleActions[index]->trigger();
+                const auto& example =
+                    exampleSchematics()[static_cast<std::size_t>(index)];
+                examplesWorked = examplesWorked &&
+                                 document.filename().isEmpty() &&
+                                 document.title() == example.title &&
+                                 document.modified() && runDc();
+                const auto extractedExample = scene->extract();
+                const auto solvedExample = analyzeDc(extractedExample);
+                const auto& operatingPoint =
+                    solvedExample.solved.operatingPoint;
+                const auto& resistorNodes = extractedExample.terminals.at("R1");
+                const double resistorVoltage =
+                    operatingPoint.voltage(resistorNodes[0]) -
+                    operatingPoint.voltage(resistorNodes[1]);
+                if (index < 4) {
+                    const std::array<double, 4> expected = {5, 5, 2, 0};
+                    examplesWorked =
+                        examplesWorked &&
+                        std::abs(resistorVoltage -
+                                 expected[static_cast<std::size_t>(index)]) <
+                            1e-8;
+                } else {
+                    const auto& diodeNodes =
+                        extractedExample.terminals.at("D1");
+                    const double diodeVoltage =
+                        operatingPoint.voltage(diodeNodes[0]) -
+                        operatingPoint.voltage(diodeNodes[1]);
+                    examplesWorked = examplesWorked && diodeVoltage > 0.5 &&
+                                     diodeVoltage < 0.7;
+                }
+                if (example.transient) {
+                    examplesWorked =
+                        analyses->runAnalysis() && examplesWorked &&
+                        analyses->data().traces.front().points.size() == 50;
+                }
+            }
+            scene->loadDivider();
+            analyses->resetInitialConditions();
+            waveformDock->hide();
+            inspectorDock->hide();
+            view->fitSchematic();
+            updateTitle();
             ComponentItem* firstResistor = nullptr;
             ComponentItem* secondResistor = nullptr;
             for (auto* item : scene->items()) {
@@ -528,6 +846,28 @@ int main(int argc, char* argv[]) {
                 return;
             }
             firstResistor->setSelected(true);
+            properties->hide();
+            resetLayout->trigger();
+            const bool layoutResetWorked = !properties->isHidden() &&
+                                           !projectToolbar->isHidden() &&
+                                           !toolbar->isHidden();
+            value->setText("-1");
+            QMetaObject::invokeMethod(value, "editingFinished",
+                                      Qt::DirectConnection);
+            const bool invalidValueHandled =
+                firstResistor->value() == 1000 && value->text() == "-1" &&
+                value->property("invalid").toBool() && !valueError->isHidden();
+            application.processEvents();
+            const bool invalidValueCaptured = window.grab().save(
+                QDir::current().filePath("gui-invalid-value.png"));
+            value->setText("1K");
+            QMetaObject::invokeMethod(value, "editingFinished",
+                                      Qt::DirectConnection);
+            const bool validationRecovered =
+                !value->property("invalid").toBool() && valueError->isHidden();
+            const bool iconsLoaded = !select->icon().isNull() &&
+                                     !run->icon().isNull() &&
+                                     !save->icon().isNull();
             const auto waitForDc = [&] {
                 QEventLoop loop;
                 QTimer poll;
@@ -573,14 +913,19 @@ int main(int argc, char* argv[]) {
                 window.grab().save(QDir::current().filePath("gui-desktop.png"));
             window.resize(720, 480);
             application.processEvents();
+            const bool compactToolbar =
+                toolbar->widgetForAction(wire)->isVisible() &&
+                toolbar->widgetForAction(resetView)->isVisible() &&
+                projectToolbar->widgetForAction(run)->isVisible() &&
+                projectToolbar->widgetForAction(save)->isVisible();
             const bool compact =
                 window.grab().save(QDir::current().filePath("gui-compact.png"));
             value->setText("10000");
             QMetaObject::invokeMethod(value, "editingFinished",
                                       Qt::DirectConnection);
-            const bool kiloFormatted = firstResistor->value() == 10000 &&
-                                       value->text() == "10K" &&
-                                       firstResistor->valueText() == "10K ohm";
+            const bool kiloFormatted =
+                firstResistor->value() == 10000 && value->text() == "10K" &&
+                firstResistor->valueText() == QStringLiteral("10K \u03A9");
             value->setText("1M");
             QMetaObject::invokeMethod(value, "editingFinished",
                                       Qt::DirectConnection);
@@ -676,13 +1021,17 @@ int main(int argc, char* argv[]) {
             const bool staleCleared = analyses->data().csv.isEmpty() &&
                                       analyses->plot().pointCount() == 0;
             application.exit(
-                solved && desktop && compact && propertyEdited && nonlinear &&
-                        missingGround && dirtyTitle && undoWorked &&
-                        redoWorked && persisted && transientWorked &&
-                        sweepWorked && csvExported && staleCleared &&
-                        waveformDesktop && waveformCompact && dcInspected &&
-                        dcProbed && transientInspected && waveformProbed &&
-                        sweepInspected && inspectorCaptured &&
+                helpWorked && helpTopicsWorked && helpWrapped && helpCaptured &&
+                        missingHelpTerm && examplesWorked && solved &&
+                        desktop && compact && propertyEdited && nonlinear &&
+                        invalidValueHandled && invalidValueCaptured &&
+                        validationRecovered && iconsLoaded && compactToolbar &&
+                        layoutResetWorked && missingGround && dirtyTitle &&
+                        undoWorked && redoWorked && persisted &&
+                        transientWorked && sweepWorked && csvExported &&
+                        staleCleared && waveformDesktop && waveformCompact &&
+                        dcInspected && dcProbed && transientInspected &&
+                        waveformProbed && sweepInspected && inspectorCaptured &&
                         inspector->frameCount() == 0 &&
                         scene->probeReading().isEmpty()
                     ? 0

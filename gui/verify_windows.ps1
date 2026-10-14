@@ -10,7 +10,7 @@ $required = @(
     'platforms/qwindows.dll', 'msvcp140.dll', 'vcruntime140.dll',
     'examples/voltage_divider.microspice', 'examples/rc_charging.microspice',
     'notices/THIRD-PARTY-NOTICES.txt', 'notices/licenses/LGPL-3.0-only.txt',
-    'notices/licenses/GPL-3.0-only.txt'
+    'notices/licenses/GPL-3.0-only.txt', 'notices/licenses/Lucide-LICENSE.txt'
 )
 foreach ($file in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $packagePath $file))) {

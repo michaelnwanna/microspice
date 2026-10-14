@@ -47,7 +47,77 @@ undo/redo, connected component movement, transient and DC-sweep controls,
 waveform plots, CSV export, interactive voltage/current probes, and a
 matrix/Newton inspector are implemented. Qt stays outside the core.
 
+## GUI preview
+
+The Qt desktop workspace: a wired voltage divider, component properties, and
+its solved DC operating point.
+
+![microspice desktop editor showing a 10 V divider and its DC operating point](docs/images/gui-editor.png)
+
+### Connected editing
+
+Drag R1 while the resistor placement tool remains active. Attached wires
+reconnect on release, DC analysis reruns, and Undo restores the complete edit.
+
+![Animated component dragging, connected-wire rerouting, DC analysis, and undo](docs/images/gui-editing.gif)
+
+### Waveform inspection
+
+A 50-sample RC charging trace, with the real plot cursor moving across time
+and displaying the nearest sample's voltage.
+
+![Animated RC charging waveform with a moving sample cursor and voltage readout](docs/images/gui-waveform.gif)
+
+### Script Workspace
+
+Edit an RC circuit's resistance, validate the source, run its analysis and
+inspect the charging waveform. Scripts remain independent of visual schematics.
+
+![Script Workspace showing highlighted source and a solved RC charging waveform](docs/images/gui-script-workspace.png)
+
+![Animated script source editing, validation, successful checks and waveform results](docs/images/gui-script-workspace.gif)
+
+<details>
+<summary>More screenshots: waveform analysis and solver diagnostics</summary>
+
+**Transient analysis** with engineering-value inputs and capacitor initial conditions.
+
+![RC transient analysis controls and a charging waveform](docs/images/gui-waveform.png)
+
+**Solver inspector** showing a transient sample's labelled MNA matrix, right-hand
+side, and solution.
+
+![Solver inspector displaying the MNA system for an RC transient sample](docs/images/gui-inspector.png)
+
+</details>
+
+These are captures of the running macOS application, not mockups. The GIFs use
+scripted GUI interactions with playback timing chosen for readability.
+[Capture and regeneration instructions](docs/images/README.md) are included.
+
 ## Quick start
+
+### Microspice Script
+
+A new Qt-free `.msim` language provides function-call circuit descriptions,
+unit-checked parameters, reusable subcircuits, named DC/transient/sweep analyses,
+measurements, and pass/fail checks. Existing SPICE `.cir` parsing is unchanged.
+
+```bash
+cmake -S . -B build
+cmake --build build
+./build/microspice_script check examples/scripts/voltage_divider.msim
+./build/microspice_script run examples/scripts/rc_charging.msim
+```
+
+See the [language guide](docs/simulation-language.md) for syntax, units,
+subcircuits, CSV export, limitations and all six runnable examples.
+In the desktop app, **Tools > Script Workspace** opens a separate editor with
+syntax highlighting, source diagnostics, Compile/Run/Cancel, named analyses,
+waveforms, solver inspection, and CSV export. Scripts and visual schematics
+have independent save/undo/unsaved-change handling; neither replaces the other.
+
+### SPICE Netlists and Core Walkthroughs
 
 ```bash
 cmake -S . -B build
@@ -81,6 +151,33 @@ On macOS the executable is built inside an app bundle. Launch it with
 
 The editor opens a wired 10 V divider. Run DC (the play icon or F5) to see
 the 5 V midpoint, terminal voltages, source currents, and iteration count.
+
+### Starter schematics
+
+Use **File > Examples** to open a pre-wired circuit, like Arduino's starter
+sketches. Examples are bundled into the app and work offline, including in
+portable packages. Each opens as an editable, unsaved copy: Save asks for a new
+filename and never overwrites the bundled example. Opening an example asks you
+to Save, Discard, or Cancel if the current project has unsaved changes.
+
+| Example | What to try | Expected result |
+| --- | --- | --- |
+| [Ohm's law - resistor load](examples/resistor_load.microspice) | Run DC; change R1 | 5 V across 1 KΩ, giving 5 mA |
+| [Voltage divider](examples/voltage_divider.microspice) | Run DC; change the resistor ratio | 10 V divided to a 5 V midpoint |
+| [Current-driven resistor](examples/current_driven_resistor.microspice) | Run DC; change I1 or R1 | 2 mA through 1 KΩ gives 2 V |
+| [RC charging](examples/rc_charging.microspice) | Run the prepared transient; probe C1 | 1 ms time constant; charging toward 10 V |
+| [Diode bias](examples/diode_bias.microspice) | Run DC; open Solver Inspector | Roughly 0.57 V forward bias with nonlinear convergence |
+
+RC charging opens the waveform panel with a `100u` timestep and `5m` stop time;
+the other examples are ready for Run DC. For diode bias, a V1 sweep from 0 to
+5 V in 0.1 V steps also shows its nonlinear response. No analysis runs implicitly
+when you open an example.
+
+The catalog uses the current resistor/capacitor/diode/independent-source models.
+Op-amp, transistor, 555-timer, and AC-source examples need additional device
+models or analysis support and are not included yet.
+
+### Canvas editing
 
 - Choose a component symbol in the toolbar, then click to place it on the
       20-unit grid. Tools remain active until another tool is selected.
@@ -183,6 +280,21 @@ parameters, wires, and reference counters. Files are validated before replacing
 the scene, and `QSaveFile` commits saves atomically. See
 [Phase 5: Desktop Projects and Editing](docs/phase-5-desktop-editor.md) for
 the schema, history design, and validation limits.
+
+### Desktop workspace
+
+**Help > User Guide** (F1) opens the complete bundled
+[desktop user guide](docs/user-guide.md), with topic navigation and forward/backward
+text search. It works offline in both development and portable builds. Help also
+provides About microspice and About Qt.
+
+The desktop workspace separates project commands from schematic tools, with
+consistent high-DPI action icons and selection-aware edit controls. Invalid
+component values remain editable with inline feedback rather than a modal dialog.
+The fitted canvas adapts to window resizing until you manually zoom or pan.
+The View menu exposes all panels and resets their layout; normal app sessions
+remember window geometry and panel layout, while smoke tests use isolated defaults.
+Lucide icon attribution is bundled with the other package notices.
 
 ### macOS packaging
 

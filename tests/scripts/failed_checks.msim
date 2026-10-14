@@ -1,0 +1,8 @@
+voltage_source("V", output, ground, 1V)
+resistor("R", output, ground, 1kohm)
+dc("bias")
+observe("bias", voltage(output))
+measure("actual", from="bias", value=voltage(output))
+check("first", actual < 0V)
+check("second", actual == 0V)
+check("third", actual >= 1V)

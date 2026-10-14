@@ -1,0 +1,5 @@
+voltage_source("V1", output, ground, 18V)
+diode("D1", output, ground, saturation=1e-300A, ideality=1)
+dc("failed")
+measure("unavailable", from="failed", value=voltage(output))
+check("must not run", unavailable == 18V)

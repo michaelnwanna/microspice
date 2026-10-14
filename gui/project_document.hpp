@@ -56,6 +56,14 @@ public:
         label_ = "Untitled schematic";
     }
 
+    void importExample(const QString& filename, const QString& title) {
+        const auto state = readProject(filename);
+        scene_.setProject(state);
+        filename_.clear();
+        label_ = title;
+        scene_.history().resetClean();
+    }
+
 private:
     EditorScene& scene_;
     QString filename_;

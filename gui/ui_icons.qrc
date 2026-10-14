@@ -1,0 +1,19 @@
+<RCC>
+  <qresource prefix="/ui">
+    <file>icons/mouse-pointer-2.png</file><file>icons/mouse-pointer-2@2x.png</file>
+    <file>icons/crosshair.png</file><file>icons/crosshair@2x.png</file>
+    <file>icons/cable.png</file><file>icons/cable@2x.png</file>
+    <file>icons/rotate-cw.png</file><file>icons/rotate-cw@2x.png</file>
+    <file>icons/trash-2.png</file><file>icons/trash-2@2x.png</file>
+    <file>icons/zoom-in.png</file><file>icons/zoom-in@2x.png</file>
+    <file>icons/zoom-out.png</file><file>icons/zoom-out@2x.png</file>
+    <file>icons/maximize.png</file><file>icons/maximize@2x.png</file>
+    <file>icons/play.png</file><file>icons/play@2x.png</file>
+    <file>icons/square.png</file><file>icons/square@2x.png</file>
+    <file>icons/file-plus-2.png</file><file>icons/file-plus-2@2x.png</file>
+    <file>icons/folder-open.png</file><file>icons/folder-open@2x.png</file>
+    <file>icons/save.png</file><file>icons/save@2x.png</file>
+    <file>icons/undo-2.png</file><file>icons/undo-2@2x.png</file>
+    <file>icons/redo-2.png</file><file>icons/redo-2@2x.png</file>
+  </qresource>
+</RCC>

@@ -42,8 +42,10 @@ int main(int argc, char* argv[]) {
                 "rounded values must promote their engineering prefix");
         ComponentItem formattedResistor(ComponentKind::Resistor);
         formattedResistor.setValue(10000);
-        require(formattedResistor.valueText() == "10K ohm",
-                "resistor label must use engineering notation");
+        require(
+            formattedResistor.unit() == QStringLiteral("\u03A9") &&
+                formattedResistor.valueText() == QStringLiteral("10K \u03A9"),
+            "resistor label must use engineering notation and the ohm symbol");
         ComponentItem formattedCapacitor(ComponentKind::Capacitor);
         formattedCapacitor.setValue(4.7e-6);
         require(formattedCapacitor.valueText() == "4.7u F",
@@ -147,6 +149,16 @@ int main(int argc, char* argv[]) {
         editorView.show();
         application.processEvents();
         editorView.centerOn(0, 0);
+        const auto mouse = [&](QEvent::Type type, const QPointF& position,
+                               Qt::MouseButton button,
+                               Qt::MouseButtons buttons) {
+            const QPointF local = editorView.mapFromScene(position);
+            const QPointF global =
+                editorView.viewport()->mapToGlobal(local.toPoint());
+            QMouseEvent event(type, local, global, button, buttons,
+                              Qt::NoModifier);
+            QApplication::sendEvent(editorView.viewport(), &event);
+        };
         const auto click = [&](QPointF position) {
             const QPointF local = editorView.mapFromScene(position);
             const QPointF global =
@@ -163,6 +175,38 @@ int main(int argc, char* argv[]) {
         click({0, 0});
         require(editor.components().size() == 1,
                 "placement tool must handle a mouse click");
+        const auto beforePlacementDrag = editor.project();
+        const int beforePlacementDragIndex = editor.history().index();
+        mouse(QEvent::MouseButtonPress, {0, 0}, Qt::LeftButton, Qt::LeftButton);
+        mouse(QEvent::MouseMove, {40, 40}, Qt::NoButton, Qt::LeftButton);
+        mouse(QEvent::MouseMove, {80, 40}, Qt::NoButton, Qt::LeftButton);
+        require(editor.history().index() == beforePlacementDragIndex,
+                "placement-mode drag must not record intermediate moves");
+        mouse(QEvent::MouseButtonRelease, {80, 40}, Qt::LeftButton,
+              Qt::NoButton);
+        require(editor.components().size() == 1 &&
+                    editor.findComponent("V1")->pos() == QPointF(80, 40),
+                "dragging an existing component in placement mode must move it "
+                "instead of adding another component");
+        require(editor.history().index() == beforePlacementDragIndex + 1,
+                "placement-mode drag must be one undo step");
+        editor.history().undo();
+        require(editor.project() == beforePlacementDrag,
+                "undo must restore the component after placement-mode drag");
+        editor.history().redo();
+        require(editor.findComponent("V1")->pos() == QPointF(80, 40),
+                "redo must restore placement-mode drag");
+        editor.history().undo();
+        click({0, 0});
+        require(
+            editor.components().size() == 1 &&
+                editor.history().index() == beforePlacementDragIndex,
+            "clicking an existing component must not place or record an edit");
+        click({240, 0});
+        require(
+            editor.components().size() == 2,
+            "empty-canvas clicks must still place components after dragging");
+        editor.history().undo();
         const int beforeWireGesture = editor.history().index();
         editor.setTool(std::nullopt, true);
         click({-60, 0});
@@ -200,16 +244,6 @@ int main(int argc, char* argv[]) {
             }
         }
         const auto beforeDrag = editor.project();
-        const auto mouse = [&](QEvent::Type type, const QPointF& position,
-                               Qt::MouseButton button,
-                               Qt::MouseButtons buttons) {
-            const QPointF local = editorView.mapFromScene(position);
-            const QPointF global =
-                editorView.viewport()->mapToGlobal(local.toPoint());
-            QMouseEvent event(type, local, global, button, buttons,
-                              Qt::NoModifier);
-            QApplication::sendEvent(editorView.viewport(), &event);
-        };
         mouse(QEvent::MouseButtonPress, {0, -120}, Qt::LeftButton,
               Qt::LeftButton);
         mouse(QEvent::MouseMove, {40, -160}, Qt::NoButton, Qt::LeftButton);
@@ -230,6 +264,20 @@ int main(int argc, char* argv[]) {
         editor.history().undo();
         require(editor.project() == beforeDrag,
                 "undo mouse drag must restore complete routing");
+        editorView.fitSchematic();
+        editorView.resize(480, 360);
+        application.processEvents();
+        require(editorView.transform().m11() < 1 &&
+                    editorView.viewport()->rect().contains(
+                        editorView.mapFromScene(editor.itemsBoundingRect())
+                            .boundingRect()),
+                "fitted view must keep the complete circuit visible on resize");
+        editorView.zoomBy(1.25);
+        const double manualScale = editorView.transform().m11();
+        editorView.resize(640, 480);
+        application.processEvents();
+        require(editorView.transform().m11() == manualScale,
+                "resizing must not reset a manually chosen zoom");
         std::cout << "GUI checks passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

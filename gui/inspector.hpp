@@ -18,7 +18,10 @@ class SolverInspector final : public QWidget {
 public:
     explicit SolverInspector(QWidget* parent = nullptr) : QWidget(parent) {
         auto* layout = new QVBoxLayout(this);
+        layout->setContentsMargins(10, 10, 10, 10);
+        layout->setSpacing(8);
         frames_ = new QComboBox(this);
+        frames_->setAccessibleName("Solver frame");
         layout->addWidget(frames_);
         status_ = new QLabel(this);
         status_->setWordWrap(true);
@@ -75,6 +78,8 @@ private:
         widget->setSelectionBehavior(QAbstractItemView::SelectRows);
         widget->horizontalHeader()->setSectionResizeMode(
             QHeaderView::ResizeToContents);
+        widget->horizontalHeader()->setMinimumSectionSize(70);
+        widget->verticalHeader()->setDefaultSectionSize(30);
         widget->setAlternatingRowColors(true);
         return widget;
     }
@@ -87,8 +92,9 @@ private:
     }
     static void number(QTableWidget* widget, std::size_t row,
                        std::size_t column, double value) {
-        widget->setItem(static_cast<int>(row), static_cast<int>(column),
-                        new QTableWidgetItem(QString::number(value, 'g', 10)));
+        auto* item = new QTableWidgetItem(QString::number(value, 'g', 10));
+        item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        widget->setItem(static_cast<int>(row), static_cast<int>(column), item);
     }
     const DiagnosticFrame* selected() const {
         const int index = frames_->currentIndex();

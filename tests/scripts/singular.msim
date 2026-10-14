@@ -1,0 +1,2 @@
+resistor("R", first, second, 1kohm)
+dc("bad")

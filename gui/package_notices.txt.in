@@ -2,6 +2,11 @@ microspice @PROJECT_VERSION@ - desktop test package
 
 Project source: https://github.com/michaelnwanna/microspice
 
+Action icons are rendered from lucide-static 0.468.0 by Lucide Contributors,
+with portions derived from Feather by Cole Bemis. The complete ISC/Feather
+license is included as licenses/Lucide-LICENSE.txt.
+Upstream: https://github.com/lucide-icons/lucide
+
 This package dynamically links Qt @Qt6_VERSION@. Qt libraries and plugins are
 provided by The Qt Company and other contributors. The qt-sbom directory
 contains the available SPDX documents from the exact SDK used to build this

@@ -1,0 +1,14 @@
+param R = 1kohm
+param C = 1uF
+param tau = R * C
+voltage_source("V1", supply, ground, 10V)
+resistor("R1", supply, output, R)
+capacitor("C1", output, ground, C)
+transient("charging", step=tau / 10, stop=5ms)
+initial("charging", "C1", 0V)
+observe("charging", voltage(output), current("V1"))
+measure("charged", from="charging", value=final(voltage(output)))
+measure("lowest", from="charging", value=min(voltage(output)))
+measure("highest", from="charging", value=max(voltage(output)))
+measure("average", from="charging", value=mean(voltage(output)))
+check("charged near 10 V", abs(charged - 10V) <= 100mV)

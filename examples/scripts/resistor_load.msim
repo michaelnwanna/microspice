@@ -1,0 +1,6 @@
+voltage_source("V1", supply, ground, 5V)
+resistor("R1", supply, ground, 1kohm)
+dc("bias")
+observe("bias", voltage(supply), current("R1"), current("V1"))
+measure("load_current", from="bias", value=current("R1"))
+check("5 mA load", abs(load_current - 5mA) <= 1nA)

@@ -1,0 +1,2 @@
+# Dimension mismatch on line 2
+  resistor("R", n, ground, 1V)

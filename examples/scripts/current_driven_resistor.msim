@@ -1,0 +1,6 @@
+current_source("I1", ground, output, 2mA)
+resistor("R1", output, ground, 1kohm)
+dc("bias")
+observe("bias", voltage(output), current("I1"), current("R1"))
+measure("output_voltage", from="bias", value=voltage(output))
+check("2 V output", abs(output_voltage - 2V) <= 1uV)

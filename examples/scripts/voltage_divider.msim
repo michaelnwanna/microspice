@@ -1,0 +1,8 @@
+param R = 1kohm
+voltage_source("V1", supply, ground, 10V)
+resistor("R1", supply, output, R)
+resistor("R2", output, ground, R)
+dc("bias")
+observe("bias", voltage(output), current("V1"))
+measure("midpoint", from="bias", value=voltage(output))
+check("divider output", abs(midpoint - 5V) <= 1mV)

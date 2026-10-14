@@ -1,7 +1,8 @@
 find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets)
 find_package(Threads REQUIRED)
 
-add_executable(microspice_gui main.cpp)
+add_executable(microspice_gui main.cpp ui_icons.qrc examples.qrc help.qrc script_examples.qrc)
+set_target_properties(microspice_gui PROPERTIES AUTORCC ON)
 target_link_libraries(microspice_gui PRIVATE microspice::core Qt6::Widgets Threads::Threads)
 ms_set_warnings(microspice_gui)
 target_compile_definitions(microspice_gui PRIVATE MS_APP_VERSION="${PROJECT_VERSION}")
@@ -22,6 +23,7 @@ if(APPLE OR WIN32)
     DESTINATION "${ms_notice_destination}" COMPONENT Desktop)
   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/licenses/LGPL-3.0-only.txt"
     "${CMAKE_CURRENT_SOURCE_DIR}/licenses/GPL-3.0-only.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/licenses/Lucide-LICENSE.txt"
     DESTINATION "${ms_notice_destination}/licenses" COMPONENT Desktop)
   if(ms_qt_sboms)
     install(FILES ${ms_qt_sboms} DESTINATION "${ms_notice_destination}/qt-sbom" COMPONENT Desktop)
@@ -60,6 +62,9 @@ if(APPLE)
   install(TARGETS microspice_gui BUNDLE DESTINATION . COMPONENT Desktop)
   install(FILES "${PROJECT_SOURCE_DIR}/examples/voltage_divider.microspice"
     "${PROJECT_SOURCE_DIR}/examples/rc_charging.microspice"
+    "${PROJECT_SOURCE_DIR}/examples/resistor_load.microspice"
+    "${PROJECT_SOURCE_DIR}/examples/current_driven_resistor.microspice"
+    "${PROJECT_SOURCE_DIR}/examples/diode_bias.microspice"
     DESTINATION microspice_gui.app/Contents/Resources/examples COMPONENT Desktop)
   configure_file("${CMAKE_CURRENT_SOURCE_DIR}/deploy_macos.cmake.in"
     "${CMAKE_CURRENT_BINARY_DIR}/deploy_macos.cmake" @ONLY)
@@ -86,6 +91,9 @@ if(WIN32)
   install(TARGETS microspice_gui RUNTIME DESTINATION . COMPONENT Desktop)
   install(FILES "${PROJECT_SOURCE_DIR}/examples/voltage_divider.microspice"
     "${PROJECT_SOURCE_DIR}/examples/rc_charging.microspice"
+    "${PROJECT_SOURCE_DIR}/examples/resistor_load.microspice"
+    "${PROJECT_SOURCE_DIR}/examples/current_driven_resistor.microspice"
+    "${PROJECT_SOURCE_DIR}/examples/diode_bias.microspice"
     DESTINATION examples COMPONENT Desktop)
   if(MSVC)
     set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
@@ -108,6 +116,12 @@ if(APPLE OR WIN32)
 endif()
 
 if(MS_BUILD_TESTING)
+  add_executable(microspice_script_workspace_test script_workspace_test.cpp script_examples.qrc help.qrc ui_icons.qrc)
+  set_target_properties(microspice_script_workspace_test PROPERTIES AUTORCC ON)
+  target_link_libraries(microspice_script_workspace_test PRIVATE microspice::core Qt6::Widgets Threads::Threads)
+  ms_set_warnings(microspice_script_workspace_test)
+  add_test(NAME microspice_script_workspace_test COMMAND microspice_script_workspace_test)
+  set_tests_properties(microspice_script_workspace_test PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
   add_executable(microspice_background_job_test background_job_test.cpp)
   target_link_libraries(microspice_background_job_test PRIVATE microspice::core Qt6::Widgets Threads::Threads)
   ms_set_warnings(microspice_background_job_test)
@@ -137,6 +151,9 @@ if(MS_BUILD_TESTING)
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
   add_test(NAME microspice_window_test COMMAND microspice_gui --smoke-test)
   set_tests_properties(microspice_window_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+  add_test(NAME microspice_demo_capture_test COMMAND microspice_gui --capture-demo)
+  set_tests_properties(microspice_demo_capture_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
   add_executable(microspice_connectivity_test connectivity_test.cpp)
   target_link_libraries(microspice_connectivity_test PRIVATE microspice::core Qt6::Widgets)

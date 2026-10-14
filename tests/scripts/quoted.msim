@@ -1,0 +1,4 @@
+voltage_source("V", output, ground, 1V)
+resistor("R,\"1", output, ground, 1kohm)
+dc("bias")
+observe("bias", voltage(output, ground), current("R,\"1"))

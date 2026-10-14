@@ -1,0 +1,10 @@
+<RCC>
+  <qresource prefix="/scripts">
+    <file alias="voltage_divider.msim">../examples/scripts/voltage_divider.msim</file>
+    <file alias="resistor_load.msim">../examples/scripts/resistor_load.msim</file>
+    <file alias="current_driven_resistor.msim">../examples/scripts/current_driven_resistor.msim</file>
+    <file alias="rc_charging.msim">../examples/scripts/rc_charging.msim</file>
+    <file alias="diode_bias.msim">../examples/scripts/diode_bias.msim</file>
+    <file alias="subcircuit_divider.msim">../examples/scripts/subcircuit_divider.msim</file>
+  </qresource>
+</RCC>

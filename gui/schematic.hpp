@@ -5,6 +5,7 @@
 #include <QGraphicsView>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QResizeEvent>
 #include <QStyleOptionGraphicsItem>
 #include <QWheelEvent>
 #include <algorithm>
@@ -140,7 +141,7 @@ public:
     QString unit() const {
         switch (kind_) {
             case ComponentKind::Resistor:
-                return "ohm";
+                return QStringLiteral("\u03A9");
             case ComponentKind::Capacitor:
                 return "F";
             case ComponentKind::Diode:
@@ -233,6 +234,7 @@ public:
         }
         const double currentScale = transform().m11();
         const double nextScale = std::clamp(currentScale * factor, 0.25, 4.0);
+        fitted_ = false;
         const QPointF before = mapToScene(viewportPosition);
         scale(nextScale / currentScale, nextScale / currentScale);
         const QPointF offset = mapToScene(viewportPosition) - before;
@@ -243,10 +245,25 @@ public:
 
     void fitSchematic() {
         resetTransform();
-        centerOn(scene()->itemsBoundingRect().center());
+        const auto bounds =
+            scene()->itemsBoundingRect().adjusted(-40, -40, 40, 40);
+        const double fittedScale =
+            std::clamp(std::min(viewport()->width() / bounds.width(),
+                                viewport()->height() / bounds.height()),
+                       0.25, 1.0);
+        scale(fittedScale, fittedScale);
+        centerOn(bounds.center());
+        fitted_ = true;
     }
 
 protected:
+    void resizeEvent(QResizeEvent* event) override {
+        QGraphicsView::resizeEvent(event);
+        if (fitted_) {
+            fitSchematic();
+        }
+    }
+
     void drawBackground(QPainter* painter, const QRectF& rect) override {
         painter->fillRect(rect, backgroundBrush());
         const double spacing =
@@ -276,6 +293,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override {
         if (event->button() == Qt::MiddleButton) {
             panning_ = true;
+            fitted_ = false;
             panPosition_ = event->position().toPoint();
             viewport()->setCursor(Qt::ClosedHandCursor);
             event->accept();
@@ -308,6 +326,7 @@ protected:
     }
 
 private:
+    bool fitted_ = true;
     bool panning_ = false;
     QPoint panPosition_;
 };

@@ -44,6 +44,14 @@ add_executable(microspice_cli examples/microspice_cli.cpp)
 target_link_libraries(microspice_cli PRIVATE microspice::core)
 ms_set_warnings(microspice_cli)
 
+add_library(microspice_script_frontend INTERFACE)
+add_library(microspice::script ALIAS microspice_script_frontend)
+target_link_libraries(microspice_script_frontend INTERFACE microspice::core)
+
+add_executable(microspice_script examples/microspice_script.cpp)
+target_link_libraries(microspice_script PRIVATE microspice::script)
+ms_set_warnings(microspice_script)
+
 if(MS_BUILD_TESTING)
   enable_testing()
   add_subdirectory(tests)

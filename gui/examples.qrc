@@ -1,0 +1,9 @@
+<RCC>
+  <qresource prefix="/examples">
+    <file alias="resistor_load.microspice">../examples/resistor_load.microspice</file>
+    <file alias="voltage_divider.microspice">../examples/voltage_divider.microspice</file>
+    <file alias="current_driven_resistor.microspice">../examples/current_driven_resistor.microspice</file>
+    <file alias="rc_charging.microspice">../examples/rc_charging.microspice</file>
+    <file alias="diode_bias.microspice">../examples/diode_bias.microspice</file>
+  </qresource>
+</RCC>

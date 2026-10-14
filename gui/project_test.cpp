@@ -32,6 +32,17 @@ int main(int argc, char* argv[]) {
         require(directory.isValid(), "temporary project directory must exist");
         const auto filename = directory.filePath("roundtrip.microspice");
         writeProject(filename, original);
+        EditorScene exampleScene;
+        ProjectDocument exampleDocument(exampleScene);
+        exampleDocument.importExample(filename, "Example copy");
+        require(exampleDocument.filename().isEmpty() &&
+                    exampleDocument.title() == "Example copy" &&
+                    exampleDocument.modified() &&
+                    exampleScene.project() == original,
+                "imported examples must be editable unsaved copies");
+        require(!exampleDocument.allowReplace(
+                    [] { return UnsavedChoice::Cancel; }, [] { return true; }),
+                "example replacement must respect cancellation");
         EditorScene reopened;
         reopened.setProject(readProject(filename));
         require(
