@@ -97,7 +97,9 @@ inline void stampDiode(DenseMatrix& matrix, std::vector<double>& rhs,
 }  // namespace detail
 
 inline NonlinearDcResult solveNonlinearDc(
-    const Circuit& circuit, const NonlinearOptions& options = {}) {
+    const Circuit& circuit, const NonlinearOptions& options = {},
+    const ExecutionControl& execution = {}) {
+    execution.check();
     if (options.maximumIterations == 0) {
         throw std::invalid_argument(
             "maximum Newton iterations must be positive");
@@ -117,7 +119,7 @@ inline NonlinearDcResult solveNonlinearDc(
         throw std::invalid_argument("thermal voltage must be positive");
     }
     if (circuit.diodes().empty()) {
-        return {solveDc(circuit), true, {}};
+        return {solveDc(circuit, execution), true, {}};
     }
 
     std::vector<double> linearizationVoltages(circuit.diodes().size(), 0.0);
@@ -127,6 +129,7 @@ inline NonlinearDcResult solveNonlinearDc(
 
     for (std::size_t iteration = 1; iteration <= options.maximumIterations;
          ++iteration) {
+        execution.check();
         DcResult system = assembleDcSystem(circuit);
         std::vector<DiodeIterationInfo> diodeInfo;
         diodeInfo.reserve(circuit.diodes().size());
@@ -147,8 +150,8 @@ inline NonlinearDcResult solveNonlinearDc(
                                  model.equivalentCurrentAmps});
         }
 
-        system.solution =
-            solveLinearSystem(system.systemMatrix, system.rightHandSide);
+        system.solution = solveLinearSystem(
+            system.systemMatrix, system.rightHandSide, 1e-12, execution);
         double maximumJunctionMismatch = 0.0;
         for (std::size_t index = 0; index < circuit.diodes().size(); ++index) {
             const Diode& diode = circuit.diodes()[index];

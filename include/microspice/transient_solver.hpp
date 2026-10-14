@@ -92,7 +92,9 @@ inline void stampConductance(DenseMatrix& matrix,
 }  // namespace detail
 
 inline TransientResult solveTransient(const Circuit& circuit,
-                                      const TransientOptions& options) {
+                                      const TransientOptions& options,
+                                      const ExecutionControl& execution = {}) {
+    execution.check();
     if (!circuit.diodes().empty()) {
         throw std::invalid_argument(
             "transient analysis does not yet support nonlinear diodes");
@@ -136,6 +138,7 @@ inline TransientResult solveTransient(const Circuit& circuit,
     transient.samples.reserve(stepCount);
 
     for (std::size_t step = 1; step <= stepCount; ++step) {
+        execution.report(step - 1, stepCount);
         DcResult system = assembleDcSystem(circuit);
         std::vector<CapacitorStepInfo> capacitorInfo;
         capacitorInfo.reserve(circuit.capacitors().size());
@@ -163,8 +166,8 @@ inline TransientResult solveTransient(const Circuit& circuit,
                                      conductance, historyCurrent, 0.0});
         }
 
-        system.solution =
-            solveLinearSystem(system.systemMatrix, system.rightHandSide);
+        system.solution = solveLinearSystem(
+            system.systemMatrix, system.rightHandSide, 1e-12, execution);
         for (std::size_t index = 0; index < circuit.capacitors().size();
              ++index) {
             const Capacitor& capacitor = circuit.capacitors()[index];
@@ -182,6 +185,7 @@ inline TransientResult solveTransient(const Circuit& circuit,
              std::move(system.systemMatrix), std::move(system.rightHandSide),
              std::move(system.solution), std::move(capacitorInfo)});
     }
+    execution.report(stepCount, stepCount);
     return transient;
 }
 

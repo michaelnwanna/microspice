@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include "microspice/execution.hpp"
+
 namespace microspice {
 
 class DenseMatrix {
@@ -42,15 +44,17 @@ private:
 ///
 /// Partial pivoting selects the largest available coefficient in each column.
 /// This both handles zero diagonal entries and reduces floating-point error.
-inline std::vector<double> solveLinearSystem(DenseMatrix matrix,
-                                             std::vector<double> rhs,
-                                             double pivotTolerance = 1e-12) {
+inline std::vector<double> solveLinearSystem(
+    DenseMatrix matrix, std::vector<double> rhs, double pivotTolerance = 1e-12,
+    const ExecutionControl& execution = {}) {
+    execution.check();
     const std::size_t size = matrix.size();
     if (rhs.size() != size) {
         throw std::invalid_argument("matrix and right-hand side size mismatch");
     }
 
     for (std::size_t pivotColumn = 0; pivotColumn < size; ++pivotColumn) {
+        execution.check();
         std::size_t pivotRow = pivotColumn;
         double largest = std::abs(matrix(pivotRow, pivotColumn));
         for (std::size_t row = pivotColumn + 1; row < size; ++row) {

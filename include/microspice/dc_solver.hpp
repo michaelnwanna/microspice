@@ -186,14 +186,16 @@ inline DcResult assembleDcSystem(const Circuit& circuit) {
 }
 
 /// Assemble and solve the Modified Nodal Analysis system A*x=z.
-inline DcResult solveDc(const Circuit& circuit) {
+inline DcResult solveDc(const Circuit& circuit,
+                        const ExecutionControl& execution = {}) {
+    execution.check();
     if (!circuit.diodes().empty()) {
         throw std::invalid_argument(
             "linear DC analysis cannot solve nonlinear diodes");
     }
     DcResult result = assembleDcSystem(circuit);
-    result.solution =
-        solveLinearSystem(result.systemMatrix, result.rightHandSide);
+    result.solution = solveLinearSystem(result.systemMatrix,
+                                        result.rightHandSide, 1e-12, execution);
     return result;
 }
 

@@ -1,0 +1,15 @@
+set(bundle "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/microspice_gui.app")
+execute_process(
+  COMMAND "@MS_MACDEPLOYQT@" "${bundle}" -always-overwrite -no-strip "-libpath=@ms_qt_prefix@/lib"
+  RESULT_VARIABLE deploy_result
+  OUTPUT_VARIABLE deploy_output
+  ERROR_VARIABLE deploy_error
+)
+if(NOT deploy_result EQUAL 0 OR "${deploy_output}${deploy_error}" MATCHES "ERROR:")
+  message(FATAL_ERROR "Qt deployment failed: ${deploy_result}\n${deploy_output}\n${deploy_error}")
+endif()
+execute_process(COMMAND /usr/bin/codesign --force --deep --sign - "${bundle}"
+  RESULT_VARIABLE sign_result)
+if(NOT sign_result EQUAL 0)
+  message(FATAL_ERROR "Ad-hoc bundle signing failed: ${sign_result}")
+endif()

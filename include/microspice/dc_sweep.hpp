@@ -33,7 +33,9 @@ struct DcSweepResult {
 };
 
 inline DcSweepResult solveDcSweep(const Circuit& circuit,
-                                  const DcSweepOptions& options) {
+                                  const DcSweepOptions& options,
+                                  const ExecutionControl& execution = {}) {
+    execution.check();
     if (!std::isfinite(options.startVoltage) ||
         !std::isfinite(options.stopVoltage) ||
         !std::isfinite(options.stepVoltage) || options.stepVoltage == 0.0) {
@@ -59,12 +61,15 @@ inline DcSweepResult solveDcSweep(const Circuit& circuit,
     sweep.points.reserve(static_cast<std::size_t>(intervalCount) + 1);
     for (std::size_t index = 0;
          index <= static_cast<std::size_t>(intervalCount); ++index) {
+        execution.report(index, static_cast<std::size_t>(intervalCount) + 1);
         const double voltage = options.startVoltage +
                                static_cast<double>(index) * options.stepVoltage;
         sweptCircuit.setVoltageSourceVoltage(options.sourceName, voltage);
         sweep.points.push_back(
-            {voltage, solveNonlinearDc(sweptCircuit, options.nonlinear)});
+            {voltage,
+             solveNonlinearDc(sweptCircuit, options.nonlinear, execution)});
     }
+    execution.report(sweep.points.size(), sweep.points.size());
     return sweep;
 }
 

@@ -15,6 +15,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 option(MS_BUILD_TESTING "Build tests" ON)
+option(MS_BUILD_GUI "Build the Qt 6 schematic editor" OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerWarnings)
@@ -46,4 +47,8 @@ ms_set_warnings(microspice_cli)
 if(MS_BUILD_TESTING)
   enable_testing()
   add_subdirectory(tests)
+endif()
+
+if(MS_BUILD_GUI)
+  add_subdirectory(gui)
 endif()

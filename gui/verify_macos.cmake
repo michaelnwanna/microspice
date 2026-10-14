@@ -1,0 +1,29 @@
+cmake_minimum_required(VERSION 3.20)
+
+if(NOT DEFINED BUNDLE OR NOT EXISTS "${BUNDLE}/Contents/MacOS/microspice_gui")
+  message(FATAL_ERROR "Pass -DBUNDLE=/absolute/path/microspice_gui.app")
+endif()
+execute_process(COMMAND /usr/bin/codesign --verify --deep --strict "${BUNDLE}"
+  RESULT_VARIABLE signature_result)
+if(NOT signature_result EQUAL 0)
+  message(FATAL_ERROR "Bundle signature verification failed")
+endif()
+file(GLOB_RECURSE bundle_files LIST_DIRECTORIES FALSE "${BUNDLE}/Contents/*")
+foreach(bundle_file IN LISTS bundle_files)
+  execute_process(COMMAND /usr/bin/otool -L "${bundle_file}"
+    OUTPUT_VARIABLE dependencies ERROR_QUIET)
+  if(dependencies MATCHES "\n[ \t]+(/Users/|/opt/|/usr/local/)")
+    message(FATAL_ERROR "Nonportable dependency in ${bundle_file}: ${dependencies}")
+  endif()
+  execute_process(COMMAND /usr/bin/otool -l "${bundle_file}"
+    OUTPUT_VARIABLE load_commands ERROR_QUIET)
+  if(load_commands MATCHES "path (/Users/|/opt/|/usr/local/)")
+    message(FATAL_ERROR "Nonportable runtime path in ${bundle_file}")
+  endif()
+endforeach()
+execute_process(COMMAND "${BUNDLE}/Contents/MacOS/microspice_gui" --smoke-test
+  WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" RESULT_VARIABLE smoke_result)
+if(NOT smoke_result EQUAL 0)
+  message(FATAL_ERROR "Deployed native smoke test failed: ${smoke_result}")
+endif()
+message(STATUS "Deployed bundle signature, dependency paths and native smoke test passed")

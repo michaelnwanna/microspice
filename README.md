@@ -6,9 +6,9 @@
 
 [![CI](https://github.com/michaelnwanna/microspice/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 ![C++17](https://img.shields.io/badge/C%2B%2B-17-blue)
-![Phase](https://img.shields.io/badge/phase-4%20nonlinear%20DC-teal)
+![Phase](https://img.shields.io/badge/phase-5%20desktop%20GUI-teal)
 
-## Current phase: nonlinear DC analysis
+## Current phase: desktop GUI foundation
 
 microspice solves linear and nonlinear DC circuits plus linear capacitor
 transients. Phase 4 includes:
@@ -38,6 +38,15 @@ transients. Phase 4 includes:
 The component set remains deliberately small so every model and convergence
 decision stays testable and visible.
 
+Phase 5 includes an optional Qt 6 Widgets desktop editor with component
+placement, orthogonal wires, junctions, property editing, rotation, deletion,
+grid snapping, zoom/pan, and linear/nonlinear DC analysis. Resistors,
+capacitors, diodes, voltage/current sources, and ground symbols translate into
+the same tested `Circuit` API. Versioned JSON project files, atomic saves,
+undo/redo, connected component movement, transient and DC-sweep controls,
+waveform plots, CSV export, interactive voltage/current probes, and a
+matrix/Newton inspector are implemented. Qt stays outside the core.
+
 ## Quick start
 
 ```bash
@@ -53,6 +62,206 @@ ctest --test-dir build --output-on-failure
 ./build/microspice_cli examples/diode_clipper.cir > clipper.csv
 ./build/microspice_cli examples/half_wave_rectifier.cir > rectifier.csv
 ```
+
+### Desktop editor
+
+Install Qt 6.2 or newer with its Widgets module, then configure the optional
+GUI target. Set `CMAKE_PREFIX_PATH` to your Qt installation prefix if CMake
+cannot discover it automatically:
+
+```bash
+cmake -S . -B build-gui -DMS_BUILD_GUI=ON -DCMAKE_PREFIX_PATH="$HOME/Qt/6.8.3/macos"
+cmake --build build-gui
+ctest --test-dir build-gui --output-on-failure
+./build-gui/gui/microspice_gui
+```
+
+On macOS the executable is built inside an app bundle. Launch it with
+`open build-gui/gui/microspice_gui.app` instead of the executable command above.
+
+The editor opens a wired 10 V divider. Run DC (the play icon or F5) to see
+the 5 V midpoint, terminal voltages, source currents, and iteration count.
+
+- Choose a component symbol in the toolbar, then click to place it on the
+      20-unit grid. Tools remain active until another tool is selected.
+- Choose Select to drag, select, or rubber-band components and wires. Rotate
+      turns selected components by 90 degrees; Delete removes the selection.
+- Select one component to edit its value, including suffixes such as `2.2k`
+      and `4.7u`. Diodes expose saturation current and ideality factor. Sources
+      accept positive, zero, or negative values.
+      Component labels and the value field use engineering prefixes: `10000`
+      displays as `10K`, `1000000` as `1M`, `0.001` as `1m`, and `0.000001`
+      as `1u`. GUI input distinguishes uppercase `M` (million) from lowercase
+      `m` (milli); `meg` is also accepted. Netlist/CLI parsing keeps the SPICE
+      convention: `meg` means million and either `m` or `M` means milli.
+- Choose Wire and click its start and end. The preview follows a horizontal,
+      then vertical path. Escape or right-click cancels an unfinished wire.
+- Wire endpoints on another wire create junctions; interior-only crossings
+      remain unconnected. Terminals touching a wire connect to it. Junction dots
+      mark branching wire connections. All ground symbols share node `0`.
+- Scroll to zoom around the pointer; hold the middle mouse button to pan.
+- File provides New, Open, Save, and Save As with the platform's standard
+      shortcuts. Project files use the `.microspice` extension and contain JSON.
+      Try [the saved divider](examples/voltage_divider.microspice).
+- Edit provides Undo and Redo. Placement, properties, movement, rotation,
+      deletion, and wire creation are undoable. A complete drag or two-segment
+      wire gesture is one undo step. History keeps the most recent 100 edits.
+- New, Open, and window close offer Save, Discard, or Cancel when there are
+      unsaved edits. Failed or cancelled saves leave the document open and dirty.
+
+Attached wire endpoints reroute on completion of a component move or rotation.
+Shared or interior junctions stay anchored and receive a connecting lead.
+Routing uses simple orthogonal bends, not obstacle avoidance; inspect new bends
+near other wires because endpoint touches still create junctions. Undo restores
+both the component and its previous wiring. Every real edit invalidates the
+displayed DC results. Floating or singular circuits and missing ground are
+reported in the results panel. Capacitors are open circuits in DC.
+
+### Waveform analysis
+
+Use Analysis > Transient or Analysis > DC Sweep to open the waveform dock.
+The dock's play icon runs the selected analysis; F5 still runs a DC operating
+point. Inputs accept engineering suffixes such as `100u`, `5m`, and `0.1`.
+
+- Transient uses timestep and stop time in seconds, plus an initial voltage
+      for each capacitor. Open [the RC project](examples/rc_charging.microspice)
+      and run the default `100u` timestep and `5m` stop time to see charging
+      toward 10 V. Initial voltages default to zero.
+- DC sweep selects an ideal voltage source and start, stop, and step voltages.
+      Descending sweeps use a negative step. Diodes use the core nonlinear solver.
+- The trace menu selects a node voltage or voltage-source current; terminal
+      references identify voltage traces. Each trace has its own vertical scale.
+      Scroll over the plot to zoom horizontally, drag to pan, hover for a sample
+      readout, and use the reset icon to restore the full range.
+- The save icon exports CSV atomically. Transient CSV uses the core's time and
+      node-voltage columns; sweep CSV includes voltages, source currents, and
+      convergence diagnostics. Edits to the schematic or analysis settings clear
+      the plot and disable export until a successful rerun.
+
+Transient analysis remains linear-only: diode transients are rejected.
+Backward-Euler samples start at the first timestep, not at time zero, and the
+last sample is the greatest timestep multiple not beyond the stop time.
+Analysis settings and results are session-local and are not saved in project
+files. Opening a different project resets initial capacitor voltages.
+DC, transient, and sweep runs execute on background workers. The stop icon next
+to Run DC cancels DC analysis; the waveform dock has its own stop icon and sample
+progress indicator. Only one analysis runs at a time. Editing the circuit or
+waveform settings cancels the affected run and discards its pending result.
+Workers use circuit/settings snapshots and publish only on the UI thread.
+
+Cancellation is cooperative at matrix pivots, Newton iterations, timesteps, and
+sweep points. Closing the window cancels and waits for active work; it may briefly
+wait for the next cancellation checkpoint. Extraction and final UI display still
+run on the UI thread. Waveform runs remain limited to 2000 samples and a
+conservative diagnostic-size budget; large analyses should use the CLI.
+
+### Probes and solver inspector
+
+Choose Probe in the schematic toolbar. Click a terminal or wire to select its
+voltage waveform, or a voltage-source body to select its branch-current waveform.
+Ground has a zero-volt trace. After Run DC, probes also display operating-point
+readings on the schematic. Probing does not modify the project or undo history.
+At an interior-only crossing, one wire is chosen without joining the nets;
+click a segment away from the crossing to choose the intended wire explicitly.
+
+Analysis > Solver Inspector opens diagnostics for the latest successful analysis
+or the last nonconverged DC attempt. Its frame selector chooses a transient sample
+or sweep point. Tabs show the labelled MNA matrix, RHS and solution, component
+stamp operations, capacitor companion/history values, and Newton convergence.
+Selecting a Newton iteration displays each diode's linearization voltage,
+solved voltage, current, conductance, and equivalent current.
+
+The Newton matrix is the final assembled linearized system, not a separate matrix
+for every iteration. Transient stamps show static devices; capacitor companions
+are listed separately. Circuit edits clear diagnostics and DC probe readings;
+waveform-setting edits clear their associated results. Diagnostics and probes
+are session-local. Failed sweeps currently report an error rather than retaining
+partial sweep diagnostics.
+
+Project files preserve references, positions, rotations, values, diode
+parameters, wires, and reference counters. Files are validated before replacing
+the scene, and `QSaveFile` commits saves atomically. See
+[Phase 5: Desktop Projects and Editing](docs/phase-5-desktop-editor.md) for
+the schema, history design, and validation limits.
+
+### macOS packaging
+
+With the GUI configured and built, install a self-contained app and create a ZIP:
+
+```bash
+cmake --install build-gui --prefix "$PWD/build-gui/package" --component Desktop
+cmake -DBUNDLE="$PWD/build-gui/package/microspice_gui.app" -P gui/verify_macos.cmake
+cpack --config build-gui/CPackConfig.cmake -B build-gui/releases
+open build-gui/package/microspice_gui.app
+```
+
+Installation uses the Qt SDK's `macdeployqt` to bundle frameworks and native
+plugins, then ad-hoc signs the app. The app includes an icon, project-version
+metadata, and divider/RC sample projects under `Contents/Resources/examples`.
+The verification script checks signatures, rejects development-machine dependency
+paths, and runs the native full-window smoke test. Run it from a writable directory
+because the smoke test writes screenshots there. A display session is required.
+
+The ZIP contains the app, which can be moved into Applications. Builds target the
+configured architecture and macOS deployment target; this is not a universal build.
+Ad-hoc signing is local integrity signing, not Developer ID signing or notarization.
+Downloaded copies may be blocked by Gatekeeper. Public releases still need signing,
+notarization, testing on other Macs, and review of Qt/third-party redistribution
+licenses and required notices. No Windows/Linux GUI packaging is provided yet.
+
+On this development Mac, Qt is installed at `$HOME/Library/Qt/6.8.3/macos`.
+CMake is available at `/usr/local/Cellar/cmake/3.31.6/bin/cmake` (not currently
+on PATH). Qt 6.8.3 references the legacy AGL framework, so builds with an SDK
+that has removed AGL need an older installed SDK or a newer compatible Qt.
+The verified local configuration uses:
+
+```bash
+/usr/local/Cellar/cmake/3.31.6/bin/cmake -S . -B build-gui \
+      -DMS_BUILD_GUI=ON \
+      -DCMAKE_PREFIX_PATH="$HOME/Library/Qt/6.8.3/macos" \
+      -DCMAKE_OSX_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX15.2.sdk
+/usr/local/Cellar/cmake/3.31.6/bin/cmake --build build-gui
+/usr/local/Cellar/cmake/3.31.6/bin/ctest --test-dir build-gui --output-on-failure
+```
+
+### Continuous integration
+
+The CI workflow builds the Qt-free core on Linux (GCC and Clang), macOS
+(Apple Clang), and Windows (MSVC). A separate Qt 6.10.0 desktop matrix builds
+the GUI and runs all tests on Ubuntu 24.04, macOS 14, and Windows Server 2022.
+GUI tests use the offscreen plugin; the macOS job also deploys the app, verifies
+its bundle signature and dependency paths, and runs its native smoke test.
+
+Runs trigger on pull requests, pushes to `main`/`master`, or manual dispatch
+from GitHub Actions. Desktop test logs and screenshots are retained as artifacts
+for 14 days, including when tests fail. Successful macOS jobs also upload an
+ad-hoc-signed test ZIP, not a notarized release. Windows and Linux deployment
+packages remain future work. Hosted-platform results are only known after a
+workflow run; local macOS checks cannot establish Windows/Linux compatibility.
+The formatting job uses clang-format 18 with the repository's configuration.
+
+With `MS_BUILD_GUI=OFF` (the default), Qt is not required. GUI tests use Qt's
+offscreen platform and check selection, grid snapping, value validation,
+zoom bounds, pointer anchoring, nonblank rendering, mouse-driven placement
+and wiring, junction extraction, rotation, deletion, and result invalidation.
+Project tests cover JSON roundtrips, the saved divider's 5 V result, malformed
+files, failed saves, unsaved-change decisions, undo/redo, gesture grouping,
+connected movement, and close cancellation.
+Waveform tests check RC charging against backward Euler, initial conditions,
+linear and diode sweeps, negative sweep steps, core CSV output, plot rendering,
+zoom/pan, trace selection, single-point ranges, invalidation, and input limits.
+A full-window smoke test solves the divider, edits an engineering value,
+solves a diode circuit, checks missing-ground reporting, exercises undo/redo
+and save/reopen, runs transient/sweep/export, and captures large and compact
+window screenshots in the GUI build directory.
+Probe tests cover real mouse clicks, unchanged history, ground, disconnected
+crossings, junctions, trace selection, and edit invalidation. Inspector tests
+check matrix labels and solutions, sample history, Newton/diode selection, and
+nonconvergence display; adapters verify retained systems satisfy $Ax = z$.
+Background tests cover worker/UI thread ownership, progress, cancellation,
+completion races, exceptions, reuse, and teardown. Panel/window tests exercise
+asynchronous DC/waveform completion, stop controls, busy-state coordination,
+pending-result invalidation, and closing a panel during analysis.
 
 The example constructs this network:
 
@@ -216,7 +425,7 @@ Qt.
 ## Architecture
 
 ```text
-future Qt GUI        CLI examples          netlist parser
+Qt GUI foundation    CLI examples          netlist parser
       |                   |                       |
       +-------------------+-----------------------+
                           |
@@ -254,7 +463,13 @@ RC charging/discharging examples checked against analytical solutions.
 Add the Shockley diode equation, Newton-Raphson linearization, convergence
 diagnostics, DC sweeps, diode curves, clippers, and rectifiers.
 
-### Phase 5 - Desktop GUI
+### Phase 5 - Desktop GUI (in progress)
+
+Implemented: optional Qt Widgets target, component placement, schematic
+canvas, properties, orthogonal wires, node extraction, rotation/deletion,
+pan/zoom, linear/nonlinear DC controls and results, project save/load,
+unsaved-change guards, undo/redo, connected movement, transient/sweep controls,
+waveform plotting, CSV export, and offscreen tests.
 
 Build a Qt 6 schematic editor with wires, component properties, probes,
 waveform plots, undo/redo, project files, and an educational matrix/iteration

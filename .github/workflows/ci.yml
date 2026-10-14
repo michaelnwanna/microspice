@@ -4,6 +4,10 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -12,39 +16,129 @@ concurrency:
 jobs:
   build-test:
     name: build & test (${{ matrix.compiler }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         include:
           - compiler: gcc
+            os: ubuntu-24.04
             cc: gcc
             cxx: g++
           - compiler: clang
+            os: ubuntu-24.04
             cc: clang
             cxx: clang++
+          - compiler: apple-clang
+            os: macos-14
+            cc: clang
+            cxx: clang++
+          - compiler: msvc
+            os: windows-2022
+            cc: cl
+            cxx: cl
     env:
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+        with:
+          arch: x64
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMS_BUILD_GUI=OFF
       - name: Build
         run: cmake --build build --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+  desktop:
+    name: desktop (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            qt-arch: gcc_64
+          - os: macos-14
+            qt-arch: clang_64
+          - os: windows-2022
+            qt-arch: win64_msvc2022_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+        with:
+          arch: x64
+      - name: Install Linux runtime dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-0 libxcb-cursor0 libegl1
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.10.0'
+          arch: ${{ matrix.qt-arch }}
+          cache: true
+      - name: Configure GUI
+        run: cmake -S . -B build-gui -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMS_BUILD_GUI=ON
+      - name: Build GUI and tests
+        run: cmake --build build-gui --parallel 4
+      - name: Test GUI and core
+        run: ctest --test-dir build-gui --output-on-failure --timeout 120
+      - name: Stage macOS bundle
+        if: runner.os == 'macOS'
+        run: cmake --install build-gui --prefix "${{ github.workspace }}/build-gui/package" --component Desktop
+      - name: Verify deployed macOS bundle
+        if: runner.os == 'macOS'
+        working-directory: build-gui
+        run: cmake -DBUNDLE="${{ github.workspace }}/build-gui/package/microspice_gui.app" -P ../gui/verify_macos.cmake
+      - name: Package macOS ZIP
+        if: runner.os == 'macOS'
+        run: cpack --config build-gui/CPackConfig.cmake -B build-gui/releases
+      - name: Verify relocated macOS ZIP
+        if: runner.os == 'macOS'
+        working-directory: build-gui
+        run: |
+          for archive in releases/*.zip; do
+            ditto -x -k "$archive" relocated-package
+          done
+          cmake -DBUNDLE="${{ github.workspace }}/build-gui/relocated-package/microspice_gui.app" -P ../gui/verify_macos.cmake
+      - name: Upload macOS test package
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: microspice-macOS-test-package
+          path: build-gui/releases/*.zip
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload test logs and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-diagnostics-${{ matrix.os }}
+          path: |
+            build-gui/Testing/Temporary/*.log
+            build-gui/gui/*.png
+            build-gui/*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
   format:
     name: clang-format check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Install clang-format
-        run: sudo apt-get update && sudo apt-get install -y clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format-18
       - name: Check formatting
         run: |
           files=$(git ls-files '*.c' '*.cc' '*.cpp' '*.h' '*.hpp')
           if [ -n "$files" ]; then
-            clang-format --dry-run --Werror $files
+            clang-format-18 --dry-run --Werror $files
           fi
