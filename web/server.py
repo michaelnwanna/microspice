@@ -1,3 +1,9 @@
+"""Loopback API: 20 MiB HTTP bodies, 16 MiB compact UTF-8 projects, 1 MiB scripts.
+
+Project simulations additionally cap geometry at 1000 components/2000 wires in
+the bridge before quadratic connectivity; validate_project uses desktop limits.
+"""
+
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -12,7 +18,12 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_LIMIT = 1024 * 1024
-REQUEST_LIMIT = SOURCE_LIMIT * 6 + 4096
+PROJECT_LIMIT = 16 * 1024 * 1024
+REQUEST_LIMIT = 20 * 1024 * 1024
+
+
+def reject_constant(value):
+    raise ValueError(f"Non-finite JSON number: {value}")
 
 
 class Jobs:
@@ -23,13 +34,27 @@ class Jobs:
         self.pool = ThreadPoolExecutor(max_workers=1)
 
     def start(self, request):
-        source = request.get("source")
-        if not isinstance(source, str) or len(source.encode("utf-8")) > SOURCE_LIMIT:
-            raise ValueError("Source must be UTF-8 text of at most 1 MiB")
-        if request.get("operation") not in ("compile", "run"):
-            raise ValueError("Operation must be compile or run")
+        if ("source" in request) == ("project" in request):
+            raise ValueError("Provide exactly one of project or source")
+        project_request = "project" in request
+        if project_request:
+            project = request["project"]
+            if not isinstance(project, dict):
+                raise ValueError("Project must be a JSON object")
+            if len(json.dumps(project, ensure_ascii=False, separators=(",", ":"),
+                              allow_nan=False).encode("utf-8")) > PROJECT_LIMIT:
+                raise ValueError("Project exceeds the 16 MiB serialized UTF-8 limit")
+        else:
+            source = request["source"]
+            if not isinstance(source, str) or len(source.encode("utf-8")) > SOURCE_LIMIT:
+                raise ValueError("Source must be UTF-8 text of at most 1 MiB")
+        operations = ("compile", "run", "validate_project") if project_request else ("compile", "run")
+        if request.get("operation") not in operations:
+            raise ValueError("Operation must be compile or run, or validate_project with a project")
         if not isinstance(request.get("analysis", ""), str):
             raise ValueError("Analysis must be a name")
+        payload = json.dumps(request, ensure_ascii=False, separators=(",", ":"),
+                             allow_nan=False).encode("utf-8")
         with self.lock:
             if any(entry["active"] for entry in self.entries.values()):
                 raise RuntimeError("Another simulation is still running")
@@ -40,10 +65,10 @@ class Jobs:
                 del self.entries[next(iter(self.entries))]
             job_id = uuid.uuid4().hex
             self.entries[job_id] = dict(state="running", created=now, process=None, active=True)
-        self.pool.submit(self.execute, job_id, request)
+        self.pool.submit(self.execute, job_id, payload)
         return job_id
 
-    def execute(self, job_id, request):
+    def execute(self, job_id, payload):
         process = None
         try:
             with self.lock:
@@ -54,7 +79,7 @@ class Jobs:
                 process = subprocess.Popen([self.bridge], stdin=subprocess.PIPE,
                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 entry["process"] = process
-            output, error = process.communicate(json.dumps(request).encode("utf-8"), timeout=20)
+            output, error = process.communicate(payload, timeout=20)
             if process.returncode:
                 raise RuntimeError("Solver process failed")
             result = json.loads(output)
@@ -151,6 +176,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json([dict(id=filename.stem, title=filename.stem.replace("_", " ").title(),
                                  source=filename.read_text(encoding="utf-8"))
                             for filename in sorted((ROOT / "examples/scripts").glob("*.msim"))])
+        elif route == "/api/project-examples":
+            self.send_json([dict(id=filename.stem, title=filename.stem.replace("_", " ").title(),
+                                 project=json.loads(filename.read_text(encoding="utf-8")))
+                            for filename in sorted((ROOT / "examples").glob("*.microspice"))])
         elif route.startswith("/api/jobs/"):
             try:
                 self.send_json(self.server.jobs.get(route.removeprefix("/api/jobs/")))
@@ -159,7 +188,11 @@ class Handler(BaseHTTPRequestHandler):
         else:
             static = {"/": (ROOT / "web/static/index.html", "text/html"),
                       "/app.js": (ROOT / "web/static/app.js", "text/javascript"),
+                      "/schematic.js": (ROOT / "web/static/schematic.js", "text/javascript"),
                       "/style.css": (ROOT / "web/static/style.css", "text/css")}
+            static["/tests/schematic.test.html"] = (ROOT / "web/static/tests/schematic.test.html", "text/html")
+            static["/tests/schematic.test.js"] = (ROOT / "web/static/tests/schematic.test.js", "text/javascript")
+            static["/tests/schematic.test.css"] = (ROOT / "web/static/tests/schematic.test.css", "text/css")
             for name in ("user-guide", "simulation-language", "web-workspace"):
                 static[f"/docs/{name}.md"] = (ROOT / f"docs/{name}.md", "text/plain")
             static["/notices"] = (ROOT / "web/THIRD-PARTY-NOTICES.md", "text/plain")
@@ -189,7 +222,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.headers.get_content_type() != "application/json":
                 self.send_json(dict(error="Expected application/json"), 415)
                 return
-            request = json.loads(self.rfile.read(length).decode("utf-8"))
+            request = json.loads(self.rfile.read(length).decode("utf-8"), parse_constant=reject_constant)
             if not isinstance(request, dict):
                 raise ValueError("Expected a JSON object")
             if route == "/api/jobs":

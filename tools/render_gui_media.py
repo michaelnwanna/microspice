@@ -10,7 +10,7 @@ def screenshot(source, destination):
         image.save(destination, optimize=True)
 
 
-def animation(sources, destination, ping_pong=False):
+def animation(sources, destination, ping_pong=False, frame_duration=120):
     frames = []
     for source in sources:
         with Image.open(source) as capture:
@@ -33,7 +33,7 @@ def animation(sources, destination, ping_pong=False):
                 tuple(bytes.fromhex(color[1:]))]
     palette.putpalette(palette.getpalette()[:720] + reserved)
     encoded = [frame.quantize(palette=palette, dither=Image.Dither.NONE) for frame in frames]
-    durations = [120] * len(encoded)
+    durations = [frame_duration] * len(encoded)
     durations[0] = 1400
     if ping_pong:
         durations[len(sources) - 1] = 1000
@@ -59,14 +59,33 @@ def animation(sources, destination, ping_pong=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Encode screenshots and GIFs from real Qt GUI captures")
+    parser = argparse.ArgumentParser(description="Encode screenshots and GIFs from real application captures")
     parser.add_argument("captures", type=Path)
-    parser.add_argument("--script-only", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--script-only", action="store_true")
+    mode.add_argument("--browser-only", action="store_true")
     parser.add_argument(
         "--output", type=Path, default=Path(__file__).resolve().parents[1] / "docs" / "images"
     )
     arguments = parser.parse_args()
     arguments.output.mkdir(parents=True, exist_ok=True)
+    if arguments.browser_only:
+        frames = sorted(arguments.captures.glob("demo-browser-[0-9][0-9].png"))
+        if [frame.name for frame in frames] != [f"demo-browser-{index:02d}.png" for index in range(5)]:
+            raise ValueError("Expected browser workflow capture frames 00 through 04")
+        sources = [arguments.captures / f"{scene}.png" for scene in
+                   ("web-schematic", "web-transient")] + frames
+        sizes = []
+        for source in sources:
+            with Image.open(source) as capture:
+                capture.load()
+                sizes.append(capture.size)
+        if len(set(sizes)) != 1:
+            raise ValueError("Browser screenshots and workflow frames must have equal dimensions")
+        for scene in ("web-schematic", "web-transient"):
+            screenshot(arguments.captures / f"{scene}.png", arguments.output / f"{scene}.png")
+        animation(frames, arguments.output / "web-workflow.gif", frame_duration=1400)
+        return
     if arguments.script_only:
         screenshot(
             arguments.captures / "script-workspace-desktop.png",

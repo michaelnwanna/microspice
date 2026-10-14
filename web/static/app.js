@@ -1,3 +1,5 @@
+import { SchematicEditor, emptyProject, engineering, parseEngineering, validateProject } from './schematic.js';
+
 const byId = (id) => document.getElementById(id);
 const source = byId('source');
 const encoder = new TextEncoder();
@@ -18,6 +20,191 @@ let fileRequest = 0;
 let draftTimer;
 let healthTimer;
 let draftWarning = false;
+let mode = 'schematic';
+let editor;
+let projectFilename = 'Voltage divider.microspice';
+let projectBaseline = '';
+let projectExamples = [];
+let projectLoad = 0;
+let loadingProject = null;
+const projectDraftKey = 'microspice.schematic-draft.v1';
+
+function projectModified() { return editor.snapshot() !== projectBaseline; }
+function updateProject() {
+  byId('project-filename').textContent = projectFilename;
+  byId('project-modified').textContent = projectModified() ? 'Modified' : 'Saved';
+  byId('project-modified').classList.toggle('dirty', projectModified());
+  byId('project-count').textContent = `${editor.project.components.length} components / ${editor.project.wires.length} wires`;
+  byId('project-undo').disabled = !editor.undoStack.length;
+  byId('project-redo').disabled = !editor.redoStack.length;
+  byId('project-delete').disabled = !editor.selection;
+  byId('project-rotate').disabled = !editor.selectedComponent();
+  if (mode === 'schematic') document.title = `${projectModified() ? '* ' : ''}${projectFilename} - microspice`;
+  updateControls();
+}
+function saveProjectDraft() {
+  try { localStorage.setItem(projectDraftKey, JSON.stringify({ project: editor.project, baseline: projectBaseline, filename: projectFilename, undo: editor.undoStack, redo: editor.redoStack })); }
+  catch { status('Schematic draft could not be saved. Download to keep your changes.'); }
+}
+function cancelProjectLoad() {
+  projectLoad += 1;
+  if (loadingProject) {
+    loadingProject.controller.abort();
+    if (loadingProject.id != null) void cancelRemote(loadingProject.id);
+    loadingProject = null;
+  }
+}
+function projectChanged() {
+  revision += 1;
+  cancelProjectLoad();
+  cancelJob('Schematic changed; job discarded.');
+  resetOutputs();
+  updateProject();
+  refreshSettings();
+  saveProjectDraft();
+  status('Schematic changed. Results cleared.');
+}
+function setMode(next) {
+  if (next === mode) return;
+  editor.endGesture(); editor.setTool('select'); updateTools();
+  cancelJob('Workspace changed; job discarded.'); cancelProjectLoad();
+  revision += 1; fileRequest += 1; mode = next;
+  for (const name of ['schematic', 'script']) {
+    byId(`${name === 'script' ? 'script' : 'schematic'}-pane`).hidden = name !== mode;
+    byId(`mode-${name}`).setAttribute('aria-selected', String(name === mode));
+    byId(`mode-${name}`).tabIndex = name === mode ? 0 : -1;
+  }
+  byId('analysis').hidden = mode === 'schematic';
+  resetOutputs(); updateDocument(); updateProject();
+  status(`${mode === 'schematic' ? 'Schematic' : 'Script'} workspace.`);
+}
+function updateTools() {
+  document.querySelectorAll('button[data-tool]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.tool === String(editor.tool))));
+}
+function selectProperties(component) {
+  byId('component-properties').hidden = !component || component.kind === 5;
+  byId('property-error').textContent = '';
+  for (const id of ['property-value', 'property-ideality']) byId(id).removeAttribute('aria-invalid');
+  if (component) {
+    byId('property-reference').textContent = component.reference;
+    byId('property-value').value = engineering(component.value);
+    byId('property-unit').textContent = ['Ω', 'F', 'A', 'V', 'A', ''][component.kind];
+    byId('property-value-label').textContent = component.kind === 2 ? 'Saturation' : 'Value';
+    byId('property-ideality').value = String(component.ideality);
+    byId('property-ideality').hidden = component.kind !== 2;
+    byId('property-ideality-label').hidden = component.kind !== 2;
+  }
+  updateProject();
+}
+function refreshSettings() {
+  const kind = byId('project-kind').value;
+  document.querySelectorAll('[data-setting]').forEach((node) => { node.hidden = node.dataset.setting === 'sweep' ? kind !== 'sweep' : kind === 'dc'; });
+  byId('stop-unit').textContent = byId('step-unit').textContent = kind === 'sweep' ? '(V)' : '(s)';
+  const sourceName = byId('project-source').value;
+  byId('project-source').replaceChildren();
+  for (const component of editor.project.components.filter((component) => component.kind === 3)) byId('project-source').add(new Option(component.reference, component.reference));
+  if ([...byId('project-source').options].some((option) => option.value === sourceName)) byId('project-source').value = sourceName;
+  const voltages = new Map([...byId('initial-voltages').querySelectorAll('input')].map((input) => [input.dataset.reference, input.value]));
+  byId('initial-voltages').replaceChildren();
+  for (const component of editor.project.components.filter((component) => component.kind === 1)) {
+    const label = element('label', `${component.reference} initial (V)`);
+    const input = element('input'); input.dataset.reference = component.reference; input.id = `initial-${component.reference}`; input.value = voltages.get(component.reference) ?? '0'; label.htmlFor = input.id;
+    byId('initial-voltages').append(label, input);
+  }
+  byId('initial-voltages').hidden = kind !== 'transient' || !byId('initial-voltages').children.length;
+}
+function analysisSettings() {
+  const kind = byId('project-kind').value;
+  const settings = { kind, initialVoltages: {} };
+  if (kind === 'dc') return settings;
+  const value = (id) => {
+    const input = byId(id);
+    try { const parsed = parseEngineering(input.value, kind === 'sweep' ? 'V' : 's'); input.removeAttribute('aria-invalid'); return parsed; }
+    catch (error) { input.setAttribute('aria-invalid', 'true'); throw error; }
+  };
+  settings.step = value('project-step'); settings.stop = value('project-stop');
+  settings.start = kind === 'sweep' ? value('project-start') : 0;
+  const intervals = (settings.stop - settings.start) / settings.step;
+  const limit = kind === 'sweep' ? 1999 : 2000;
+  if (settings.step <= 0 || settings.stop <= settings.start || !Number.isFinite(intervals) || intervals > limit + Number.EPSILON * limit * 4) throw new Error('Step must be positive; stop must exceed start. Limit: 2,000 samples.');
+  if (kind === 'sweep') {
+    settings.source = byId('project-source').value;
+    if (!settings.source) throw new Error('A voltage source is required for a sweep.');
+  } else {
+    for (const input of byId('initial-voltages').querySelectorAll('input')) {
+      try { settings.initialVoltages[input.dataset.reference] = parseEngineering(input.value, 'V'); input.removeAttribute('aria-invalid'); }
+      catch (error) { input.setAttribute('aria-invalid', 'true'); throw error; }
+    }
+  }
+  return settings;
+}
+function replaceProject(project, name) {
+  cancelProjectLoad(); cancelJob('Project replaced; job discarded.'); revision += 1;
+  editor.replace(project); projectFilename = name; projectBaseline = editor.snapshot();
+  byId('initial-voltages').replaceChildren();
+  refreshSettings(); selectProperties(null); resetOutputs(); updateProject(); saveProjectDraft();
+  status(`Opened ${name}`);
+}
+function canReplaceProject() { return !projectModified() || confirm('Discard the modified schematic and replace it? Download first to keep a copy.'); }
+async function validateAndReplace(project, name, ticket) {
+  validateProject(project);
+  if (ticket !== projectLoad) return;
+  const job = { id: null, controller: new AbortController() }; loadingProject = job;
+  try {
+    status(`Validating ${name}...`);
+    const created = await request('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project, operation: 'validate_project' }), signal: job.controller.signal });
+    if (created.id == null) throw new Error('Server did not return a validation job ID.');
+    job.id = created.id;
+    if (ticket !== projectLoad) { void cancelRemote(job.id); return; }
+    for (;;) {
+      const response = await request(`/api/jobs/${encodeURIComponent(job.id)}`, { signal: job.controller.signal });
+      if (ticket !== projectLoad) return;
+      if (response.state === 'done') {
+        if (!response.result?.ok) throw new Error((response.result?.diagnostics || []).map((diagnostic) => diagnostic.message).join(' ') || 'Project validation failed.');
+        const normalized = validateProject(response.result.normalizedProject ?? project);
+        loadingProject = null;
+        if (canReplaceProject() && ticket === projectLoad) replaceProject(normalized, name);
+        else status('Project replacement cancelled.');
+        return;
+      }
+      if (response.state !== 'running') throw new Error('Project validation was cancelled.');
+      await pause(200, job.controller.signal);
+    }
+  } finally {
+    if (loadingProject === job) { loadingProject = null; if (job.id != null) void cancelRemote(job.id); }
+  }
+}
+async function openProject(file) {
+  if (!file) return;
+  editor.endGesture(); cancelProjectLoad(); const ticket = projectLoad;
+  try {
+    if (!/\.microspice$/i.test(file.name)) throw new Error('Choose a .microspice project.');
+    if (file.size > 16 * 1024 * 1024) throw new Error('Project exceeds the 16 MiB file limit.');
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
+    if (ticket !== projectLoad) return;
+    await validateAndReplace(JSON.parse(text), file.name, ticket);
+  } catch (error) { if (ticket === projectLoad) status(`Project not opened: ${error instanceof TypeError ? 'File is not valid UTF-8.' : error.message}`); }
+}
+function saveProject() {
+  editor.endGesture();
+  download(JSON.stringify(editor.project, null, 2) + '\n', projectFilename, 'application/json;charset=utf-8');
+  projectBaseline = editor.snapshot(); updateProject(); saveProjectDraft(); status(`Downloaded ${projectFilename}`);
+}
+function chooseFile() {
+  if (mode === 'schematic') { editor.endGesture(); cancelProjectLoad(); }
+  else fileRequest += 1;
+  byId(mode === 'schematic' ? 'project-file' : 'file-input').click();
+}
+async function loadProjectExamples() {
+  try {
+    const response = await request('/api/project-examples');
+    if (!Array.isArray(response)) throw new Error('Invalid project examples response.');
+    projectExamples = response.filter((item) => typeof item.title === 'string' && item.id != null && item.project);
+    byId('project-examples').replaceChildren(new Option('Examples', ''));
+    for (const [index, example] of projectExamples.entries()) byId('project-examples').add(new Option(example.title, String(index)));
+    byId('project-examples').disabled = !projectExamples.length;
+  } catch { status('Project examples unavailable. The local divider, New, and Open remain available.'); }
+}
 
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -41,8 +228,9 @@ function tickNumber(value) {
 
 function updateControls() {
   const busy = Boolean(activeJob);
-  byId('compile').disabled = busy || !ready || !source.value.trim();
-  byId('run').disabled = busy || !ready || !source.value.trim();
+  const empty = mode === 'script' ? !source.value.trim() : !editor?.project.components.length;
+  byId('compile').disabled = busy || !ready || empty;
+  byId('run').disabled = busy || !ready || empty;
   byId('stop').disabled = !busy;
   byId('analysis').disabled = busy || !byId('analysis').options.length || byId('analysis').options.length === 1;
   byId('job-state').textContent = busy ? (activeJob.operation === 'compile' ? 'Compiling' : 'Running') : 'Idle';
@@ -52,7 +240,7 @@ function updateDocument() {
   byId('filename').textContent = filename;
   byId('modified').textContent = modified() ? 'Modified' : 'Saved';
   byId('modified').classList.toggle('dirty', modified());
-  document.title = `${modified() ? '* ' : ''}${filename} - microspice`;
+  if (mode === 'script') document.title = `${modified() ? '* ' : ''}${filename} - microspice`;
   byId('gutter').textContent = Array.from({ length: source.value.split('\n').length }, (_, index) => index + 1).join('\n');
   byId('gutter').scrollTop = source.scrollTop;
   updatePosition();
@@ -80,6 +268,8 @@ function resetOutputs() {
   result = null;
   plotRange = null;
   cursorIndex = null;
+  byId('settings-error').textContent = '';
+  byId('project-settings').querySelectorAll('[aria-invalid]').forEach((input) => input.removeAttribute('aria-invalid'));
   byId('analysis').replaceChildren(new Option('All analyses', ''));
   byId('summary').textContent = 'No compiled source';
   renderDiagnostics([]);
@@ -201,17 +391,25 @@ function pause(milliseconds, signal) {
 }
 
 async function startJob(operation) {
-  if (activeJob || !ready || !source.value.trim()) return;
-  const job = { revision, operation, controller: new AbortController(), id: null, cancelled: false };
-  const snapshot = source.value;
-  const analysis = byId('analysis').value;
+  editor.endGesture();
+  if (activeJob || !ready || (mode === 'script' && !source.value.trim())) return;
+  let body;
+  try {
+    if (mode === 'schematic') {
+      byId('settings-error').textContent = '';
+      if (editor.project.components.length > 1000 || editor.project.wires.length > 2000) throw new Error('Simulation limit: 1,000 components and 2,000 wires.');
+      if (!editor.project.components.some((component) => component.kind === 5)) throw new Error('Add a ground before compiling or running.');
+      body = { project: structuredClone(editor.project), operation, settings: operation === 'run' ? analysisSettings() : { kind: 'dc' } };
+    } else body = { source: source.value, operation, analysis: operation === 'run' ? byId('analysis').value : '' };
+  } catch (error) { byId('settings-error').textContent = error.message; status(error.message); return; }
+  const job = { revision, mode, operation, controller: new AbortController(), id: null, cancelled: false };
   activeJob = job;
   updateControls();
   status(operation === 'compile' ? 'Compiling source...' : 'Running simulation...');
   try {
     const created = await request('/api/jobs', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: snapshot, operation, analysis: operation === 'run' ? analysis : '' })
+      body: JSON.stringify(body)
     });
     if (created.id === undefined || created.id === null) throw new Error('Server did not return a job ID.');
     job.id = created.id;
@@ -271,6 +469,7 @@ function diagnosticOffset(diagnostic) {
 }
 
 function focusDiagnostic(diagnostic) {
+  if (mode !== 'script') return;
   const offset = diagnosticOffset(diagnostic);
   const start = byteToIndex(offset);
   const end = byteToIndex(offset + Math.max(1, diagnostic.length || 1));
@@ -291,7 +490,7 @@ function renderDiagnostics(diagnostics) {
   for (const diagnostic of diagnostics) {
     const item = element('li');
     const button = element('button', `${diagnostic.warning ? 'Warning' : 'Error'}${diagnostic.line ? ` ${diagnostic.line}:${diagnostic.column || 1}` : ''}  ${diagnostic.message}`, diagnostic.warning ? 'warning' : 'error');
-    button.title = 'Select source location';
+    button.title = mode === 'script' ? 'Select source location' : 'Schematic diagnostic';
     button.addEventListener('click', () => focusDiagnostic(diagnostic));
     item.append(button);
     list.append(item);
@@ -550,6 +749,7 @@ async function checkHealth() {
   byId('health').classList.toggle('online', ready);
   updateControls();
   if (ready && !examples.length && !examplesLoading) void loadExamples();
+  if (ready && !projectExamples.length) void loadProjectExamples();
   healthTimer = setTimeout(checkHealth, ready ? 30000 : 5000);
   return ready;
 }
@@ -573,7 +773,7 @@ source.addEventListener('input', sourceChanged);
 source.addEventListener('scroll', () => { byId('gutter').scrollTop = source.scrollTop; });
 for (const name of ['click', 'keyup', 'select']) source.addEventListener(name, updatePosition);
 byId('new').addEventListener('click', () => { if (canReplace()) replaceSource('', 'Untitled.msim'); });
-byId('open').addEventListener('click', () => byId('file-input').click());
+byId('open').addEventListener('click', chooseFile);
 byId('file-input').addEventListener('change', (event) => { void openFile(event.target.files[0]); event.target.value = ''; });
 byId('save').addEventListener('click', saveSource);
 byId('examples').addEventListener('change', (event) => {
@@ -595,7 +795,8 @@ byId('zoom-in').addEventListener('click', () => zoom(0.5));
 byId('zoom-out').addEventListener('click', () => zoom(2));
 byId('csv').addEventListener('click', () => {
   const analysis = selectedAnalysis();
-  if (analysis?.csv) download(analysis.csv, `${filename.replace(/\.msim$/i, '')}-${analysis.name}.csv`, 'text/csv;charset=utf-8');
+  const name = mode === 'schematic' ? projectFilename : filename;
+  if (analysis?.csv) download(analysis.csv, `${name.replace(/\.(msim|microspice)$/i, '')}-${analysis.name}.csv`, 'text/csv;charset=utf-8');
 });
 for (const name of ['results', 'waveform', 'samples']) {
   const tab = byId(`tab-${name}`);
@@ -638,22 +839,113 @@ canvas.addEventListener('keydown', (event) => {
   }
 });
 new ResizeObserver(drawPlot).observe(canvas);
+editor = new SchematicEditor(byId('schematic-canvas'), projectChanged, selectProperties, status);
+projectBaseline = editor.snapshot();
+try {
+  const stored = localStorage.getItem(projectDraftKey);
+  if (stored) {
+    const draft = JSON.parse(stored);
+    validateProject(draft.project);
+    validateProject(JSON.parse(draft.baseline));
+    if (typeof draft.filename !== 'string') throw new Error('Invalid draft filename.');
+    const history = (entries) => {
+      if (entries === undefined) return [];
+      if (!Array.isArray(entries) || entries.length > 100) throw new Error('Invalid draft history.');
+      for (const entry of entries) validateProject(JSON.parse(entry));
+      return entries;
+    };
+    const undo = history(draft.undo), redo = history(draft.redo);
+    editor.replace(draft.project); editor.undoStack = undo; editor.redoStack = redo; projectBaseline = draft.baseline; projectFilename = draft.filename;
+  }
+} catch { status('Schematic draft unavailable. Loaded the built-in divider.'); }
+function schematicAction(action) {
+  try { action(); updateProject(); }
+  catch (error) { status(error.message); }
+}
+for (const name of ['schematic', 'script']) {
+  byId(`mode-${name}`).addEventListener('click', () => setMode(name));
+  byId(`mode-${name}`).addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault(); setMode(mode === 'schematic' ? 'script' : 'schematic'); byId(`mode-${mode}`).focus();
+    }
+  });
+}
+document.querySelectorAll('button[data-tool]').forEach((button) => button.addEventListener('click', () => {
+  editor.endGesture(); editor.setTool(/^\d$/.test(button.dataset.tool) ? Number(button.dataset.tool) : button.dataset.tool); updateTools();
+}));
+byId('project-undo').addEventListener('click', () => schematicAction(() => editor.history()));
+byId('project-redo').addEventListener('click', () => schematicAction(() => editor.history(true)));
+byId('project-delete').addEventListener('click', () => schematicAction(() => editor.remove()));
+byId('project-rotate').addEventListener('click', () => schematicAction(() => editor.rotate()));
+byId('project-fit').addEventListener('click', () => editor.fit());
+byId('project-zoom-in').addEventListener('click', () => editor.zoom(1.25));
+byId('project-zoom-out').addEventListener('click', () => editor.zoom(0.8));
+byId('component-properties').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const component = editor.selectedComponent(); if (!component) return;
+  let field = byId('property-value');
+  try {
+    const value = parseEngineering(field.value, ['Ω', 'F', 'A', 'V', 'A', ''][component.kind]);
+    if (component.kind < 3 && value <= 0) throw new Error('Value must be positive.');
+    field.removeAttribute('aria-invalid');
+    let ideality = component.ideality;
+    if (component.kind === 2) {
+      field = byId('property-ideality'); ideality = parseEngineering(field.value);
+      if (ideality <= 0) throw new Error('Ideality must be positive.');
+      field.removeAttribute('aria-invalid');
+    }
+    editor.edit(() => { component.value = value; component.ideality = ideality; });
+    byId('property-error').textContent = '';
+  } catch (error) { field.setAttribute('aria-invalid', 'true'); byId('property-error').textContent = error.message; }
+});
+byId('project-settings').addEventListener('input', (event) => {
+  revision += 1; cancelProjectLoad(); cancelJob('Analysis settings changed; job discarded.'); resetOutputs();
+  byId('settings-error').textContent = '';
+  if (event.target.id === 'project-kind') {
+    const sweep = event.target.value === 'sweep';
+    byId('project-stop').value = sweep ? '10' : '10m'; byId('project-step').value = sweep ? '0.1' : '100u'; refreshSettings();
+  }
+  status('Analysis settings changed. Results cleared.');
+});
+byId('project-new').addEventListener('click', () => { editor.endGesture(); cancelProjectLoad(); if (canReplaceProject()) replaceProject(emptyProject(), 'Untitled.microspice'); });
+byId('project-open').addEventListener('click', chooseFile);
+byId('project-file').addEventListener('change', (event) => { void openProject(event.target.files[0]); event.target.value = ''; });
+byId('project-save').addEventListener('click', saveProject);
+byId('project-examples').addEventListener('change', async (event) => {
+  const example = projectExamples[Number(event.target.value)];
+  if (event.target.value === '' || !example) return;
+  event.target.value = ''; editor.endGesture(); cancelProjectLoad(); const ticket = projectLoad;
+  try { await validateAndReplace(example.project, `${String(example.id).replace(/\.microspice$/i, '').replace(/[^a-zA-Z0-9_-]/g, '_')}.microspice`, ticket); }
+  catch (error) { if (ticket === projectLoad) status(`Project not opened: ${error.message}`); }
+});
+byId('schematic-canvas').addEventListener('pointerup', () => updateProject());
+byId('schematic-canvas').addEventListener('keydown', (event) => {
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  const deltas = { ArrowLeft: [-20, 0], ArrowRight: [20, 0], ArrowUp: [0, -20], ArrowDown: [0, 20] };
+  if (event.key in deltas) { event.preventDefault(); schematicAction(() => editor.move(...deltas[event.key])); }
+  else if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); schematicAction(() => editor.remove()); }
+  else if (event.key.toLowerCase() === 'r') { event.preventDefault(); schematicAction(() => editor.rotate()); }
+  else if (event.key === 'Escape') { event.preventDefault(); editor.setTool('select'); editor.select(null); updateTools(); updateProject(); }
+});
 byId('help-button').addEventListener('click', () => byId('help-dialog').showModal());
 byId('help-close').addEventListener('click', () => byId('help-dialog').close());
 document.addEventListener('keydown', (event) => {
   if (byId('help-dialog').open) return;
   const command = event.ctrlKey || event.metaKey;
-  if (command && event.key.toLowerCase() === 's') { event.preventDefault(); saveSource(); }
-  else if (command && event.key.toLowerCase() === 'o') { event.preventDefault(); byId('file-input').click(); }
-  else if (command && event.key.toLowerCase() === 'f') { event.preventDefault(); showFind(); }
+  if (command && event.key.toLowerCase() === 's') { event.preventDefault(); mode === 'schematic' ? saveProject() : saveSource(); }
+  else if (command && event.key.toLowerCase() === 'o') { event.preventDefault(); chooseFile(); }
+  else if (command && event.key.toLowerCase() === 'f') { event.preventDefault(); mode === 'schematic' ? editor.fit() : showFind(); }
+  else if (command && mode === 'schematic' && !event.target.matches('input, textarea') && ['z', 'y'].includes(event.key.toLowerCase())) { event.preventDefault(); schematicAction(() => editor.history(event.shiftKey || event.key.toLowerCase() === 'y')); }
   else if (event.key === 'F5') { event.preventDefault(); void startJob('run'); }
+  else if (event.key === 'Escape' && mode === 'schematic') { editor.setTool('select'); editor.select(null); updateTools(); updateProject(); }
   else if (event.key === 'Escape' && !byId('find-form').hidden) { byId('find-form').hidden = true; source.focus(); }
 });
 window.addEventListener('beforeunload', (event) => {
-  if (modified()) { event.preventDefault(); event.returnValue = ''; }
+  editor.endGesture();
+  if (modified() || projectModified()) { event.preventDefault(); event.returnValue = ''; }
 });
-window.addEventListener('pagehide', () => { saveDraft(); if (activeJob?.id != null) void cancelRemote(activeJob.id); });
-document.addEventListener('visibilitychange', () => { if (document.hidden) saveDraft(); });
+window.addEventListener('pagehide', () => { saveDraft(); saveProjectDraft(); cancelProjectLoad(); if (activeJob?.id != null) void cancelRemote(activeJob.id); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { saveDraft(); saveProjectDraft(); } });
 
 try {
   const stored = localStorage.getItem(draftKey);
@@ -666,6 +958,8 @@ try {
   }
 } catch { status('Local draft unavailable.'); }
 updateDocument();
+updateProject(); refreshSettings(); editor.fit(); byId('analysis').hidden = true;
 resetOutputs();
 void checkHealth().then((connected) => { if (byId('status').textContent === 'Connecting to engine') status(connected ? 'Ready.' : 'Engine unavailable. Retrying connection.'); });
 void loadExamples();
+void loadProjectExamples();

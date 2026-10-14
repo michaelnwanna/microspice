@@ -18,4 +18,13 @@ if(MS_BUILD_TESTING)
   add_test(NAME microspice_web_tests COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/test_server.py" "$<TARGET_FILE:microspice_web_bridge>")
   set_tests_properties(microspice_web_tests PROPERTIES TIMEOUT 90)
+  if(MS_BUILD_GUI)
+    find_package(Qt6 REQUIRED COMPONENTS Widgets)
+    add_executable(microspice_web_project_parity_test project_parity_test.cpp)
+    target_link_libraries(microspice_web_project_parity_test PRIVATE
+      microspice::script nlohmann_json::nlohmann_json Qt6::Widgets)
+    ms_set_warnings(microspice_web_project_parity_test)
+    add_test(NAME microspice_web_project_parity_test
+      COMMAND microspice_web_project_parity_test "${PROJECT_SOURCE_DIR}/examples")
+  endif()
 endif()

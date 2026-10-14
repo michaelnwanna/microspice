@@ -10,11 +10,47 @@
 </head>
 <body>
   <header class="app-header">
-    <div class="brand">microspice <span>Script Workspace</span></div>
+    <div class="brand">microspice <span>Workspace</span></div>
+    <div class="mode-tabs" role="tablist" aria-label="Workspace mode"><button id="mode-schematic" role="tab" aria-selected="true" aria-controls="schematic-pane">Schematic</button><button id="mode-script" role="tab" aria-selected="false" aria-controls="script-pane" tabindex="-1">Script</button></div>
     <div class="header-actions"><span id="health" class="connection">Connecting</span><button id="help-button" title="Open help">Help</button></div>
   </header>
   <main>
-    <section class="source-pane" aria-label="Simulation source">
+    <section id="schematic-pane" class="source-pane" role="tabpanel" aria-labelledby="mode-schematic">
+      <div class="toolbar file-toolbar" aria-label="Project files">
+        <button id="project-new" title="New project"><img src="/icons/file-plus-2.png" alt="">New</button>
+        <button id="project-open" title="Open project"><img src="/icons/folder-open.png" alt="">Open</button>
+        <button id="project-save" title="Download project"><img src="/icons/save.png" alt="">Download</button>
+        <select id="project-examples" aria-label="Project examples" disabled><option value="">Examples</option></select>
+        <input id="project-file" type="file" accept=".microspice" hidden>
+      </div>
+      <div class="document-bar"><strong id="project-filename">Voltage divider.microspice</strong><span id="project-modified">Saved</span><span id="project-count" class="document-count"></span></div>
+      <div class="toolbar schematic-toolbar" aria-label="Schematic tools">
+        <button data-tool="select" aria-label="Select" title="Select" aria-pressed="true"><img src="/icons/mouse-pointer-2.png" alt=""></button>
+        <button data-tool="wire" aria-label="Wire" title="Wire" aria-pressed="false"><img src="/icons/cable.png" alt=""></button>
+        <button data-tool="pan" aria-label="Pan" title="Pan" aria-pressed="false"><img src="/icons/crosshair.png" alt=""></button>
+        <span class="tool-divider"></span>
+        <button data-tool="0" aria-label="Resistor" title="Resistor" aria-pressed="false">R</button><button data-tool="1" aria-label="Capacitor" title="Capacitor" aria-pressed="false">C</button><button data-tool="2" aria-label="Diode" title="Diode" aria-pressed="false">D</button><button data-tool="3" aria-label="Voltage source" title="Voltage source" aria-pressed="false">V</button><button data-tool="4" aria-label="Current source" title="Current source" aria-pressed="false">I</button><button data-tool="5" aria-label="Ground" title="Ground" aria-pressed="false">G</button>
+        <span class="tool-divider"></span>
+        <button id="project-undo" title="Undo" aria-label="Undo"><img src="/icons/undo-2.png" alt=""></button><button id="project-redo" title="Redo" aria-label="Redo"><img src="/icons/redo-2.png" alt=""></button>
+        <button id="project-rotate" title="Rotate" aria-label="Rotate"><img src="/icons/rotate-cw.png" alt=""></button><button id="project-delete" title="Delete selection" aria-label="Delete selection"><img src="/icons/trash-2.png" alt=""></button>
+        <button id="project-zoom-in" title="Zoom in schematic" aria-label="Zoom in schematic"><img src="/icons/zoom-in.png" alt=""></button><button id="project-zoom-out" title="Zoom out schematic" aria-label="Zoom out schematic"><img src="/icons/zoom-out.png" alt=""></button><button id="project-fit" title="Fit schematic" aria-label="Fit schematic"><img src="/icons/maximize.png" alt=""></button>
+      </div>
+      <div id="schematic-canvas" class="schematic-canvas"></div>
+      <form id="component-properties" class="component-properties" hidden>
+        <strong id="property-reference"></strong><label for="property-value" id="property-value-label">Value</label><input id="property-value" autocomplete="off" spellcheck="false"><span id="property-unit"></span>
+        <label for="property-ideality" id="property-ideality-label" hidden>Ideality</label><input id="property-ideality" autocomplete="off" hidden>
+        <button type="submit" id="property-apply" title="Apply properties">Apply</button><span id="property-error" class="error" role="alert"></span>
+      </form>
+      <div class="analysis-settings" id="project-settings">
+        <label for="project-kind">Analysis</label><select id="project-kind"><option value="dc">DC</option><option value="transient">Transient</option><option value="sweep">Sweep</option></select>
+        <label for="project-source" data-setting="sweep" hidden>Source</label><select id="project-source" data-setting="sweep" hidden></select>
+        <label for="project-start" data-setting="sweep" hidden>Start (V)</label><input id="project-start" value="0" data-setting="sweep" hidden>
+        <label for="project-stop" data-setting="time" hidden>Stop <span id="stop-unit">(s)</span></label><input id="project-stop" value="10m" data-setting="time" hidden>
+        <label for="project-step" data-setting="time" hidden>Step <span id="step-unit">(s)</span></label><input id="project-step" value="100u" data-setting="time" hidden>
+        <div id="initial-voltages" class="initial-voltages" hidden></div><span id="settings-error" class="error" role="alert"></span>
+      </div>
+    </section>
+    <section id="script-pane" class="source-pane" role="tabpanel" aria-labelledby="mode-script" hidden>
       <div class="toolbar file-toolbar" aria-label="File controls">
         <button id="new" title="New script"><img src="/icons/file-plus-2.png" alt="">New</button>
         <button id="open" title="Open script"><img src="/icons/folder-open.png" alt="">Open</button>
@@ -26,8 +62,6 @@
       <form id="find-form" class="find-bar" hidden><label for="find-input">Find</label><input id="find-input" type="search" autocomplete="off"><button type="submit">Next</button><span id="find-status" role="status"></span><button id="find-close" type="button" title="Close find" aria-label="Close find">&times;</button></form>
       <div class="editor"><pre id="gutter" aria-hidden="true">1</pre><textarea id="source" aria-label="Simulation script source" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off"></textarea></div>
       <div class="editor-footer"><span id="position">Ln 1, Col 1</span><span>UTF-8 <span class="separator">/</span> MSIM</span></div>
-      <div class="diagnostic-heading">Diagnostics <span id="diagnostic-count">0</span></div>
-      <ul id="diagnostics" aria-label="Source diagnostics"><li class="empty">No diagnostics</li></ul>
     </section>
     <section class="output-pane" aria-label="Simulation output">
       <div class="toolbar run-toolbar" aria-label="Simulation controls">
@@ -37,6 +71,7 @@
         <label class="sr-only" for="analysis">Analysis to run</label><select id="analysis" disabled><option value="">All analyses</option></select>
       </div>
       <div class="output-heading"><h1>Simulation</h1><span id="summary">No compiled source</span></div>
+      <div class="diagnostic-heading">Diagnostics <span id="diagnostic-count">0</span></div><ul id="diagnostics" aria-label="Simulation diagnostics"><li class="empty">No diagnostics</li></ul>
       <div class="tabs" role="tablist" aria-label="Output views">
         <button id="tab-results" role="tab" aria-selected="true" aria-controls="results-panel" tabindex="0">Results</button>
         <button id="tab-waveform" role="tab" aria-selected="false" aria-controls="waveform-panel" tabindex="-1">Waveform</button>
@@ -55,10 +90,12 @@
   <footer class="status-bar"><span id="status" role="status" aria-live="polite">Connecting to engine</span><span id="job-state">Idle</span></footer>
   <dialog id="help-dialog" aria-labelledby="help-title">
     <div class="dialog-heading"><h2 id="help-title">Workspace Help</h2><button id="help-close" title="Close help" aria-label="Close help">&times;</button></div>
+    <h3>Schematics</h3><p>Schematic and Script keep separate documents. Place R, C, D, V, I, or G; drag an existing component to move it. Wire uses two grid points with an orthogonal elbow. Endpoint and pin touches connect; interior crossings do not. Select a wire or component to delete it. R rotates, arrows move, and Escape cancels the wire and returns to Select. Undo and redo retain up to 100 edits. Moving connected pins retains their original anchors with orthogonal extensions; routing is not obstacle-aware.</p>
+    <h3>Project Files and Analysis</h3><p>Open validates UTF-8 .microspice projects up to 16 MiB before replacing the schematic. Download saves a project; examples are independent of script examples. DC, transient, and voltage-source sweep share the output views. Values use SI suffixes: M is mega, m is milli, and u is micro. Simulation is limited to 1,000 components, 2,000 wires, and 2,000 samples.</p>
     <h3>Source Files</h3><p>Open a UTF-8 .msim file up to 1 MiB or choose an example. Download writes the current script to a file. A local draft is restored in this browser when storage is available.</p>
     <h3>Simulation</h3><p>Compile validates the script and lists named analyses. Run executes all analyses or the selected name. Editing source discards results and cancels a running job. Select a diagnostic to focus its source location.</p>
     <h3>Output</h3><p>Results contains scalar values, measurements and checks. Waveform and Samples share an analysis and trace selection. Use Fit to reset the plot, the wheel to zoom, or drag to pan. CSV exports the selected analysis.</p>
-    <h3>Keyboard</h3><p>Ctrl/Cmd S downloads, Ctrl/Cmd O opens, Ctrl/Cmd F finds source text, and F5 runs. The editor uses native undo. Plot arrow keys move the cursor; + and - zoom, and Home fits.</p>
+    <h3>Keyboard</h3><p>Ctrl/Cmd S downloads the active document; Ctrl/Cmd O opens its file type. Ctrl/Cmd F fits the schematic or finds script text. F5 runs the active mode. Ctrl/Cmd Z and Shift Z undo and redo schematic edits; script editing uses native undo. Plot arrow keys move the cursor; + and - zoom, and Home fits.</p>
     <nav class="doc-links" aria-label="Offline documentation"><a href="/docs/user-guide.md" target="_blank" rel="noopener">User Guide (.md)</a><a href="/docs/simulation-language.md" target="_blank" rel="noopener">Simulation Language (.md)</a><a href="/docs/web-workspace.md" target="_blank" rel="noopener">Web Workspace (.md)</a><a href="/notices" target="_blank" rel="noopener">Third-party notices</a></nav>
   </dialog>
 </body>

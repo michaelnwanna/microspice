@@ -30,7 +30,7 @@ input { min-width: 0; border: 1px solid var(--border); border-radius: 3px; heigh
 .connection::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--coral); margin-right: 6px; }
 .connection.online::before { background: var(--green); }
 main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(320px, .95fr) minmax(400px, 1.15fr); }
-.source-pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid var(--border); background: white; }
+.source-pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: auto; border-right: 1px solid var(--border); background: white; }
 .output-pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: #f8fafb; }
 .toolbar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; min-height: 53px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .file-toolbar select, .run-toolbar select { flex: 1; max-width: 240px; }
@@ -133,4 +133,58 @@ dialog p { line-height: 1.65; margin: 6px 0; color: #52666f; }
   .plot-frame { aspect-ratio: 4 / 3; min-height: 240px; }
   #cursor { grid-column: 1 / -1; text-align: left; padding: 4px 0; min-height: 20px; }
   .status-bar { padding: 7px 12px; }
+}
+.mode-tabs { display: flex; gap: 4px; margin-right: auto; }
+.mode-tabs button { border-color: transparent; background: transparent; height: 34px; }
+.mode-tabs button[aria-selected="true"] { background: #e2f2eb; border-color: #b4d6c7; color: #116b50; font-weight: 600; }
+main { grid-template-columns: minmax(0, 1.55fr) minmax(340px, 1fr); }
+.document-count { margin-left: auto; color: var(--muted); font-size: 11px; }
+#project-filename { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#project-modified { color: var(--muted); font-size: 11px; }
+#project-modified.dirty { color: var(--coral); }
+.schematic-toolbar { gap: 4px; flex-wrap: wrap; padding: 7px 10px; min-height: 46px; }
+.schematic-toolbar button { width: 30px; height: 30px; padding: 0; flex: 0 0 30px; }
+.schematic-toolbar [data-tool] { font-weight: 650; }
+.schematic-toolbar button[aria-pressed="true"] { border-color: #8cbca9; background: #e2f2eb; color: #116b50; }
+.tool-divider { width: 1px; height: 22px; background: var(--border); margin: 0 3px; }
+.schematic-canvas { flex: 1; min-height: 260px; min-width: 0; overflow: hidden; position: relative; background: #fbfdfc; }
+.schematic-canvas > svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; user-select: none; }
+.schematic-canvas svg[data-tool="wire"] { cursor: crosshair; }
+.schematic-canvas svg[data-tool="pan"] { cursor: grab; }
+.wire-hit { stroke: transparent; stroke-width: 14; fill: none; pointer-events: stroke; }
+.wire-line { stroke: #29856a; stroke-width: 2; fill: none; pointer-events: none; }
+.component-hit { fill: transparent; stroke: none; }
+.symbol { stroke: #2c454b; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.pin { fill: #fbfdfc; stroke: #29856a; stroke-width: 1.5; }
+.junction { fill: #29856a; pointer-events: none; }
+.component text { fill: #30464c; font: 13px "Avenir Next", Avenir, sans-serif; }
+.component .reference { font-weight: 650; }
+.component .component-value { font-size: 12px; fill: #61747b; }
+.selected .symbol, .selected .wire-line { stroke: #c16b30; stroke-width: 3; }
+.selected .component-hit { fill: #edb97b20; }
+.component-properties { display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; gap: 7px; padding: 10px 14px; border-top: 1px solid var(--border); background: #f8faf9; }
+.component-properties input { width: 110px; }
+.component-properties #property-ideality { width: 65px; }
+.component-properties .error, #settings-error { flex-basis: 100%; font-size: 11px; }
+.component-properties .error:empty, #settings-error:empty { display: none; }
+input[aria-invalid="true"] { border-color: var(--coral); background: #fff6f4; }
+.analysis-settings { display: flex; flex-shrink: 0; align-items: center; gap: 7px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px solid var(--border); background: #f3f7f6; }
+.analysis-settings label { font-size: 11px; color: #52676e; }
+.analysis-settings input { width: 83px; }
+.analysis-settings select { max-width: 140px; }
+.initial-voltages { flex-basis: 100%; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; max-height: 115px; overflow: auto; }
+.initial-voltages label { white-space: nowrap; }
+.output-pane #diagnostics { max-height: 100px; min-height: 38px; flex-shrink: 0; }
+.output-pane .diagnostic-heading { padding: 5px 14px; font-size: 11px; }
+@media (max-width: 1000px) { .brand span { display: none; } .app-header { gap: 12px; } .toolbar.file-toolbar { flex-wrap: wrap; } .file-toolbar select { max-width: none; flex-basis: 120px; } }
+@media (max-width: 760px) {
+  .app-header { flex-wrap: wrap; gap: 8px; }
+  .brand { font-size: 18px; }
+  .mode-tabs { order: 3; flex-basis: 100%; }
+  .mode-tabs button { flex: 1; }
+  .header-actions { margin-left: auto; }
+  .schematic-canvas { height: 400px; flex: none; min-height: 400px; }
+  .schematic-toolbar { padding: 7px 10px; }
+  .document-count { display: none; }
+  .component-properties, .analysis-settings { padding: 9px 12px; }
 }

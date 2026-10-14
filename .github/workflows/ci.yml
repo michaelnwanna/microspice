@@ -85,7 +85,7 @@ jobs:
           arch: ${{ matrix.qt-arch }}
           cache: true
       - name: Configure GUI
-        run: cmake -S . -B build-gui -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMS_BUILD_GUI=ON
+        run: cmake -S . -B build-gui -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMS_BUILD_GUI=ON -DMS_BUILD_WEB=ON
       - name: Build GUI and tests
         run: cmake --build build-gui --parallel 4
       - name: Test GUI and core

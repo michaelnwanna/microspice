@@ -1,0 +1,4 @@
+body { height: auto; padding: 20px; }
+#fixture { position: relative; width: 600px; height: 480px; }
+pre { white-space: pre-wrap; }
+iframe { width: 800px; height: 850px; border: 0; }

@@ -3,6 +3,7 @@
 #include <sstream>
 
 #include "microspice/script/output.hpp"
+#include "project_backend.hpp"
 
 using nlohmann::json;
 namespace script = microspice::script;
@@ -24,11 +25,32 @@ int main() {
     json response = {{"ok", false}, {"diagnostics", json::array()}};
     try {
         const auto request = json::parse(std::cin);
-        const auto source = request.at("source").get<std::string>();
+        if (!request.is_object() ||
+            request.contains("source") == request.contains("project"))
+            throw std::invalid_argument(
+                "Provide exactly one of project or source");
         const auto operation = request.value("operation", "run");
-        if (operation != "run" && operation != "compile")
+        const bool projectRequest = request.contains("project");
+        if (operation != "run" && operation != "compile" &&
+            !(projectRequest && operation == "validate_project"))
             throw std::invalid_argument("Unknown operation");
-        const auto compiled = script::compile(source);
+        script::CompiledSimulation compiled;
+        if (projectRequest) {
+            const auto project =
+                microspice::web::parseProject(request.at("project"));
+            response["normalizedProject"] = project.normalized;
+            if (operation == "validate_project") {
+                response["ok"] = true;
+                std::cout << response.dump() << '\n';
+                return 0;
+            }
+            auto simulation = microspice::web::compileProject(
+                project, request.value("settings", json::object()));
+            compiled = std::move(simulation.compiled);
+            response["terminals"] = std::move(simulation.terminals);
+        } else {
+            compiled = script::compile(request.at("source").get<std::string>());
+        }
         response["diagnostics"] = json::array();
         for (const auto& warning : compiled.warnings)
             response["diagnostics"].push_back(diagnosticJson(warning));
@@ -39,8 +61,9 @@ int main() {
         response["nodes"] = compiled.circuit.nodes();
         response["components"] = compiled.componentSpans.size();
         if (operation == "run") {
-            const auto result =
-                script::run(compiled, {}, request.value("analysis", ""));
+            const auto result = script::run(
+                compiled, {},
+                projectRequest ? "schematic" : request.value("analysis", ""));
             response["results"] = json::array();
             for (const auto& analysis : result.analyses) {
                 json observations = json::array();

@@ -225,9 +225,10 @@ for active work; assembly or final UI operations can briefly delay cancellation.
 ## Browser Workspace
 
 The optional browser app uses the same script compiler and solver without Qt.
-It is a separate local, script-based interface rather than a port of the visual
-schematic editor. See the [browser guide](web-workspace.md) for build/start,
-source downloads, local drafts, plots, cancellation and security limits. Desktop
+It provides independent Schematic and Script modes, including desktop-compatible
+`.microspice` projects, visual editing, and DC/transient/sweep analysis. See the
+[browser guide](web-workspace.md) for build/start, project/source downloads,
+local drafts, routing limits, plots, cancellation and security limits. Desktop
 menu commands in this document apply only to the Qt app. AC remains deferred.
 
 ## Script Workspace

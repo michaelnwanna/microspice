@@ -51,10 +51,12 @@ Desktop examples, offline help, background cancellation, and the independent
 `.msim` Script Workspace are implemented. Windows and macOS test packages pass
 hosted deployment checks; public release compliance and signing remain separate.
 
-An optional local browser Script Workspace uses the same C++ compiler and solvers
-through a loopback-only Python service. It supports source files, examples,
-diagnostics, named analyses, waveform inspection, samples, checks and CSV export.
-It is not a WebAssembly build or a browser schematic editor.
+An optional local browser workspace uses the same C++ compiler and solvers
+through a loopback-only Python service. Its visual editor supports component
+placement, connected moves/rotation, orthogonal wires, properties, undo/redo,
+and desktop-compatible `.microspice` files. An independent Script mode supports
+`.msim` programs. Both modes share diagnostics, DC/transient/sweep results,
+waveform inspection, samples and CSV export. It is not a WebAssembly build.
 
 ## Browser Workspace
 
@@ -75,6 +77,26 @@ select an unused port. No Node.js, Qt, account, or CDN is required at runtime.
 See the [web usage guide](docs/web-workspace.md) for document handling,
 limitations, security boundaries, and deployment details. AC analysis is deferred
 until after this browser milestone.
+
+### Browser Gallery
+
+The visual browser workspace running a wired divider's DC analysis, with a
+10 V supply and a solved 5 V midpoint.
+
+![Browser schematic editor showing a voltage divider and its real DC results](docs/images/web-schematic.png)
+
+RC charging with a 100us timestep, 5ms stop time, and an inspected voltage sample.
+
+![Browser RC charging schematic and solved transient waveform with sample cursor](docs/images/web-transient.png)
+
+Open an example, set the transient analysis, run it, select the charging trace,
+and inspect a sample.
+
+![Animated browser workflow from RC example and analysis settings to results, waveform and cursor](docs/images/web-workflow.gif)
+
+These are real browser captures backed by the local C++ solver, not mockups.
+Playback timing is chosen for readability, not to benchmark simulation speed.
+See the [capture and regeneration instructions](docs/images/README.md#browser-workspace-captures).
 
 ## GUI preview
 
@@ -652,11 +674,12 @@ parameters, subcircuits, measurements and checks through CLI and desktop.
 
 ### Browser Workspace (local implementation)
 
-Script-based browser editor, shared C++ engine, local source open/download,
-compile/run/stop, named analyses, diagnostics, waveform zoom/pan/cursor, sample
-tables and CSV downloads. The local service is not a public multi-user host;
-standalone WebAssembly, visual schematic editing, and matrix inspection are not
-implemented in the browser.
+Visual schematic and independent script editors, shared C++ engine and
+connectivity extraction, desktop project open/download, properties, connected
+movement with safe-routing rejection, undo/redo, compile/run/stop, diagnostics,
+DC/transient/sweep controls, waveform zoom/pan/cursor, samples and CSV downloads.
+The local service is not a public multi-user host; standalone WebAssembly and
+matrix inspection are not implemented in the browser.
 
 ### Next - AC analysis (deferred)
 
