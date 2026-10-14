@@ -116,6 +116,32 @@ jobs:
           path: build-gui/releases/*.zip
           if-no-files-found: error
           retention-days: 14
+      - name: Stage Windows package
+        if: runner.os == 'Windows'
+        run: cmake --install build-gui --prefix "${{ github.workspace }}/build-gui/package" --component Desktop
+      - name: Verify deployed Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./gui/verify_windows.ps1 -Package build-gui/package -OutputDirectory build-gui/windows-smoke
+      - name: Package Windows ZIP
+        if: runner.os == 'Windows'
+        run: cpack --config build-gui/CPackConfig.cmake -B build-gui/releases
+      - name: Verify relocated Windows ZIP
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archives = @(Get-ChildItem build-gui/releases -Filter '*.zip')
+          if ($archives.Count -ne 1) { throw 'Expected exactly one Windows ZIP' }
+          Expand-Archive -LiteralPath $archives[0].FullName -DestinationPath 'build-gui/relocated package'
+          ./gui/verify_windows.ps1 -Package 'build-gui/relocated package' -OutputDirectory build-gui/windows-relocated-smoke
+      - name: Upload Windows test package
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: microspice-Windows-test-package
+          path: build-gui/releases/*.zip
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload test logs and screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -125,6 +151,8 @@ jobs:
             build-gui/Testing/Temporary/*.log
             build-gui/gui/*.png
             build-gui/*.png
+            build-gui/windows-smoke/*
+            build-gui/windows-relocated-smoke/*
           if-no-files-found: ignore
           retention-days: 14
 

@@ -1,0 +1,19 @@
+set(package "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}")
+set(deploy_configuration --release)
+if(CMAKE_INSTALL_CONFIG_NAME STREQUAL "Debug")
+  set(deploy_configuration --debug)
+endif()
+execute_process(
+  COMMAND "@MS_WINDEPLOYQT@" "${package}/microspice_gui.exe"
+    ${deploy_configuration} --no-translations --no-compiler-runtime --dir "${package}"
+  RESULT_VARIABLE deploy_result
+  OUTPUT_VARIABLE deploy_output
+  ERROR_VARIABLE deploy_error
+)
+if(NOT deploy_result EQUAL 0 OR "${deploy_output}${deploy_error}" MATCHES "[Ee][Rr][Rr][Oo][Rr]:")
+  message(FATAL_ERROR "Qt deployment failed: ${deploy_result}\n${deploy_output}\n${deploy_error}")
+endif()
+if(NOT EXISTS "${package}/platforms/qwindows.dll" AND
+   NOT EXISTS "${package}/platforms/qwindowsd.dll")
+  message(FATAL_ERROR "Windows platform plugin was not deployed")
+endif()

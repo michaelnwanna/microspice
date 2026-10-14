@@ -207,7 +207,32 @@ configured architecture and macOS deployment target; this is not a universal bui
 Ad-hoc signing is local integrity signing, not Developer ID signing or notarization.
 Downloaded copies may be blocked by Gatekeeper. Public releases still need signing,
 notarization, testing on other Macs, and review of Qt/third-party redistribution
-licenses and required notices. No Windows/Linux GUI packaging is provided yet.
+licenses and required notices. Linux GUI packaging is not provided yet.
+
+### Windows packaging
+
+Use an x64 MSVC developer terminal with Qt installed and discoverable by CMake:
+
+```powershell
+cmake -S . -B build-gui -G Ninja -DMS_BUILD_GUI=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build-gui --parallel 4
+cmake --install build-gui --prefix "$PWD/build-gui/package" --component Desktop
+./gui/verify_windows.ps1 -Package build-gui/package -OutputDirectory build-gui/windows-smoke
+cpack --config build-gui/CPackConfig.cmake -B build-gui/releases
+```
+
+Extract the entire ZIP into a folder and launch `microspice_gui.exe`. Keep the
+DLLs and plugin directories alongside it. Example projects are under `examples`.
+`windeployqt` bundles Qt dependencies; CMake supplies MSVC/UCRT runtime libraries.
+The executable includes an icon and version metadata and opens without a console.
+This portable package is not an installer and does not register file associations.
+It is unsigned, so SmartScreen may warn. Public distribution still requires
+license-notice review and testing on supported clean Windows installations.
+
+The verification script removes Qt environment overrides and SDK paths from
+`PATH`, then runs a native smoke test with a timeout. CI also verifies the ZIP
+extracted into a path with spaces. This checks Qt SDK independence, not every
+possible dependency on system libraries already installed on a hosted runner.
 
 On this development Mac, Qt is installed at `$HOME/Library/Qt/6.8.3/macos`.
 CMake is available at `/usr/local/Cellar/cmake/3.31.6/bin/cmake` (not currently
@@ -234,9 +259,10 @@ its bundle signature and dependency paths, and runs its native smoke test.
 
 Runs trigger on pull requests, pushes to `main`/`master`, or manual dispatch
 from GitHub Actions. Desktop test logs and screenshots are retained as artifacts
-for 14 days, including when tests fail. Successful macOS jobs also upload an
-ad-hoc-signed test ZIP, not a notarized release. Windows and Linux deployment
-packages remain future work. Hosted-platform results are only known after a
+for 14 days, including when tests fail. Successful macOS and Windows jobs upload
+test ZIPs, not signed/notarized public releases. Windows checks staged and extracted
+packages without Qt SDK paths. Linux packaging remains future work.
+Hosted-platform results are only known after a
 workflow run; local macOS checks cannot establish Windows/Linux compatibility.
 The formatting job uses clang-format 18 with the repository's configuration.
 

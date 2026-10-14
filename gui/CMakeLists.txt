@@ -6,10 +6,13 @@ target_link_libraries(microspice_gui PRIVATE microspice::core Qt6::Widgets Threa
 ms_set_warnings(microspice_gui)
 target_compile_definitions(microspice_gui PRIVATE MS_APP_VERSION="${PROJECT_VERSION}")
 
-if(APPLE)
+if(APPLE OR WIN32)
   add_executable(microspice_icon_generator EXCLUDE_FROM_ALL icon_generator.cpp)
   target_link_libraries(microspice_icon_generator PRIVATE Qt6::Gui)
   ms_set_warnings(microspice_icon_generator)
+endif()
+
+if(APPLE)
   set(ms_icon "${CMAKE_CURRENT_BINARY_DIR}/microspice.icns")
   add_custom_command(OUTPUT "${ms_icon}"
     COMMAND microspice_icon_generator "${CMAKE_CURRENT_BINARY_DIR}/microspice.iconset"
@@ -39,10 +42,45 @@ if(APPLE)
   configure_file("${CMAKE_CURRENT_SOURCE_DIR}/deploy_macos.cmake.in"
     "${CMAKE_CURRENT_BINARY_DIR}/deploy_macos.cmake" @ONLY)
   install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/deploy_macos.cmake" COMPONENT Desktop)
+  set(CPACK_PACKAGE_FILE_NAME "microspice-${PROJECT_VERSION}-macOS-${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+
+if(WIN32)
+  enable_language(RC)
+  set(ms_icon "${CMAKE_CURRENT_BINARY_DIR}/microspice.ico")
+  add_custom_command(OUTPUT "${ms_icon}"
+    COMMAND microspice_icon_generator "${CMAKE_CURRENT_BINARY_DIR}/windows-icons" "${ms_icon}"
+    DEPENDS microspice_icon_generator
+    VERBATIM)
+  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/windows_resource.rc.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/windows_resource.rc" @ONLY)
+  set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/windows_resource.rc"
+    PROPERTIES OBJECT_DEPENDS "${ms_icon}")
+  target_sources(microspice_gui PRIVATE "${ms_icon}" "${CMAKE_CURRENT_BINARY_DIR}/windows_resource.rc")
+  set_target_properties(microspice_gui PROPERTIES WIN32_EXECUTABLE TRUE)
+  get_target_property(ms_qmake Qt6::qmake IMPORTED_LOCATION)
+  get_filename_component(ms_qt_bin "${ms_qmake}" DIRECTORY)
+  find_program(MS_WINDEPLOYQT windeployqt HINTS "${ms_qt_bin}" REQUIRED)
+  install(TARGETS microspice_gui RUNTIME DESTINATION . COMPONENT Desktop)
+  install(FILES "${PROJECT_SOURCE_DIR}/examples/voltage_divider.microspice"
+    "${PROJECT_SOURCE_DIR}/examples/rc_charging.microspice"
+    DESTINATION examples COMPONENT Desktop)
+  if(MSVC)
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_COMPONENT Desktop)
+    set(CMAKE_INSTALL_UCRT_LIBRARIES TRUE)
+    include(InstallRequiredSystemLibraries)
+  endif()
+  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/deploy_windows.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/deploy_windows.cmake" @ONLY)
+  install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/deploy_windows.cmake" COMPONENT Desktop)
+  set(CPACK_PACKAGE_FILE_NAME "microspice-${PROJECT_VERSION}-Windows-${CMAKE_SYSTEM_PROCESSOR}")
+endif()
+
+if(APPLE OR WIN32)
   set(CPACK_GENERATOR ZIP)
   set(CPACK_PACKAGE_NAME microspice)
   set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-  set(CPACK_PACKAGE_FILE_NAME "microspice-${PROJECT_VERSION}-macOS-${CMAKE_SYSTEM_PROCESSOR}")
   set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
   include(CPack)
 endif()

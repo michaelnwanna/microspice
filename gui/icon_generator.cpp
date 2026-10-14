@@ -1,3 +1,4 @@
+#include <QCoreApplication>
 #include <QDir>
 #include <QImage>
 #include <QLinearGradient>
@@ -7,7 +8,8 @@
 #include <cstdlib>
 
 int main(int argc, char* argv[]) {
-    if (argc != 2) {
+    QCoreApplication application(argc, argv);
+    if (argc != 2 && argc != 3) {
         return EXIT_FAILURE;
     }
     const QDir directory(QString::fromLocal8Bit(argv[1]));
@@ -64,6 +66,12 @@ int main(int argc, char* argv[]) {
             if (!image.save(directory.filePath(filename))) {
                 return EXIT_FAILURE;
             }
+        }
+    }
+    if (argc == 3) {
+        const QImage icon(directory.filePath("icon_256x256.png"));
+        if (!icon.save(QString::fromLocal8Bit(argv[2]), "ICO")) {
+            return EXIT_FAILURE;
         }
     }
     return EXIT_SUCCESS;

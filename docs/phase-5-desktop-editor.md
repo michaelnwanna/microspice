@@ -188,12 +188,22 @@ along with more advanced routing.
 
 ## Cross-Platform CI
 
+Windows uses a GUI-subsystem executable with icon/version resources. The Desktop
+install component stages the editor and samples, calls `windeployqt` for Qt
+DLLs/plugins, and uses `InstallRequiredSystemLibraries` for MSVC/UCRT runtimes.
+CPack creates a portable ZIP. `verify_windows.ps1` checks required files and
+version metadata, then runs the native smoke test with a system-only PATH and
+Qt environment overrides removed. It restores the environment afterward and
+enforces a 120-second timeout. CI also tests the ZIP extracted into a path with
+spaces and uploads logs/screenshots. Packages are unsigned and need license-notice
+review and clean-machine testing before public release.
+
 The GitHub Actions workflow retains Qt-free core jobs on Linux GCC/Clang and adds
 macOS Apple Clang and Windows MSVC. Its Qt 6.10.0 GUI matrix targets Ubuntu 24.04,
 macOS 14, and Windows Server 2022 using Ninja and an explicit MSVC environment.
 Desktop tests have per-test timeouts, and logs/screenshots upload even on failure.
-The macOS job additionally stages/deploys the bundle, audits it with the native
-smoke test, creates a ZIP, and uploads it as a test artifact. Artifact retention
+The macOS and Windows jobs additionally deploy the editor, run native smoke
+tests, create ZIPs, verify extracted packages, and upload test artifacts. Artifact retention
 is 14 days; these are not signed/notarized public releases.
 
 Workflow YAML and Actions expressions can be checked locally with actionlint;
