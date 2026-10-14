@@ -234,6 +234,14 @@ The verification script removes Qt environment overrides and SDK paths from
 extracted into a path with spaces. This checks Qt SDK independence, not every
 possible dependency on system libraries already installed on a hosted runner.
 
+Both desktop packages now include a versioned Qt provenance note, the build SDK's
+SPDX documents, and LGPLv3/GPLv3 companion texts under `notices` (inside
+`Contents/Resources` on macOS). Package verification requires these materials.
+They do not complete a third-party license audit. microspice has no declared
+project license yet, which also blocks public redistribution. See the
+[release-readiness checklist](docs/release-readiness.md) for licensing, matching
+dependency sources, clean-machine acceptance, signing and publication gates.
+
 On this development Mac, Qt is installed at `$HOME/Library/Qt/6.8.3/macos`.
 CMake is available at `/usr/local/Cellar/cmake/3.31.6/bin/cmake` (not currently
 on PATH). Qt 6.8.3 references the legacy AGL framework, so builds with an SDK

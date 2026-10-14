@@ -1,0 +1,34 @@
+microspice @PROJECT_VERSION@ - desktop test package
+
+Project source: https://github.com/michaelnwanna/microspice
+
+This package dynamically links Qt @Qt6_VERSION@. Qt libraries and plugins are
+provided by The Qt Company and other contributors. The qt-sbom directory
+contains the available SPDX documents from the exact SDK used to build this
+package, including component attribution and license expressions. These SDK
+documents can also cover components not shipped in this package. They are
+provenance materials, not a complete deployed-binary license audit.
+
+Qt source archives: https://download.qt.io/archive/qt/
+Qt licensing: https://www.qt.io/licensing/open-source-lgpl-obligations
+
+The licenses directory includes unmodified LGPLv3 and GPLv3 companion texts
+from https://github.com/qt/qtbase/tree/v6.8.3/LICENSES. Qt versions used by this
+project have LGPLv3 license options for the linked Core/Gui/Widgets modules.
+The SDK SBOMs identify additional third-party terms that still require review.
+
+Qt is not statically linked into microspice. This test package does not prohibit
+replacement of its Qt shared libraries with compatible modified versions, or
+reverse engineering for debugging such modifications. Platform code signing
+may require re-signing a modified application before it can be launched.
+
+Windows packages also include Microsoft Visual C++ and Universal C Runtime
+redistributable libraries, subject to the applicable Microsoft Visual Studio
+license and redistribution terms, not Qt's licenses.
+
+RELEASE STATUS: NOT CLEARED FOR PUBLIC REDISTRIBUTION
+microspice has no declared project license yet. A project license decision,
+third-party license text and notice audit, matching dependency source
+availability, runtime redistribution review, signing decisions and clean-machine
+testing are required before a public release. This note does not grant rights
+to microspice or certify license compliance.

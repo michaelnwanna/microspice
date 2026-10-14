@@ -7,6 +7,28 @@ ms_set_warnings(microspice_gui)
 target_compile_definitions(microspice_gui PRIVATE MS_APP_VERSION="${PROJECT_VERSION}")
 
 if(APPLE OR WIN32)
+  get_target_property(ms_qmake Qt6::qmake IMPORTED_LOCATION)
+  get_filename_component(ms_qt_bin "${ms_qmake}" DIRECTORY)
+  get_filename_component(ms_qt_prefix "${ms_qt_bin}" DIRECTORY)
+  file(GLOB ms_qt_sboms "${ms_qt_prefix}/sbom/*.spdx" "${ms_qt_prefix}/sbom/*.spdx.json")
+  if(APPLE)
+    set(ms_notice_destination microspice_gui.app/Contents/Resources/notices)
+  else()
+    set(ms_notice_destination notices)
+  endif()
+  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/package_notices.txt.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/THIRD-PARTY-NOTICES.txt" @ONLY)
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/THIRD-PARTY-NOTICES.txt"
+    DESTINATION "${ms_notice_destination}" COMPONENT Desktop)
+  install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/licenses/LGPL-3.0-only.txt"
+    "${CMAKE_CURRENT_SOURCE_DIR}/licenses/GPL-3.0-only.txt"
+    DESTINATION "${ms_notice_destination}/licenses" COMPONENT Desktop)
+  if(ms_qt_sboms)
+    install(FILES ${ms_qt_sboms} DESTINATION "${ms_notice_destination}/qt-sbom" COMPONENT Desktop)
+  else()
+    install(CODE "message(FATAL_ERROR \"Qt SDK SBOMs are missing; Desktop packaging requires SDK provenance materials\")"
+      COMPONENT Desktop)
+  endif()
   add_executable(microspice_icon_generator EXCLUDE_FROM_ALL icon_generator.cpp)
   target_link_libraries(microspice_icon_generator PRIVATE Qt6::Gui)
   ms_set_warnings(microspice_icon_generator)

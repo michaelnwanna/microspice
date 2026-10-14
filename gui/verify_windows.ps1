@@ -8,12 +8,17 @@ $packagePath = (Resolve-Path -LiteralPath $Package).Path
 $required = @(
     'microspice_gui.exe', 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll',
     'platforms/qwindows.dll', 'msvcp140.dll', 'vcruntime140.dll',
-    'examples/voltage_divider.microspice', 'examples/rc_charging.microspice'
+    'examples/voltage_divider.microspice', 'examples/rc_charging.microspice',
+    'notices/THIRD-PARTY-NOTICES.txt', 'notices/licenses/LGPL-3.0-only.txt',
+    'notices/licenses/GPL-3.0-only.txt'
 )
 foreach ($file in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $packagePath $file))) {
         throw "Package is missing $file"
     }
+}
+if (-not (Get-ChildItem -LiteralPath (Join-Path $packagePath 'notices/qt-sbom') -Filter 'qtbase-*.spdx.json' -File)) {
+    throw 'Package Qt base SDK SBOM is missing'
 }
 $version = (Get-Item -LiteralPath (Join-Path $packagePath 'microspice_gui.exe')).VersionInfo
 if ($version.ProductName -ne 'microspice' -or [string]::IsNullOrWhiteSpace($version.ProductVersion)) {
